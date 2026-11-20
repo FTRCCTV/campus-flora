@@ -6,7 +6,7 @@ document.querySelectorAll('[data-icon]').forEach(el=>el.innerHTML=icon(el.datase
 let apiKey='', requestController, collection=[], illustrated=false;
 const hosted='https://cau-campus-flora-notebook.bubblybox131.chatgpt.site/';
 const inFlight=new Map(),modelCache=new Map(),modelErrors=new Map();
-const profileKey=latin=>'cau.flora.profile.v1.'+latin.trim().toLowerCase();
+const profileKey=latin=>'cau.flora.profile.ds.v1.'+latin.trim().toLowerCase();
 function cachedModel(latin){
   const k=profileKey(latin);
   if(modelCache.has(k))return modelCache.get(k);
@@ -14,14 +14,16 @@ function cachedModel(latin){
 }
 async function refinePlant(r){
   const k=profileKey(r.latin);
-  if(cachedModel(r.latin)||location.protocol==='file:')return;
+  if(cachedModel(r.latin))return true;
+  if(location.protocol==='file:')return false;
   if(inFlight.has(k))return inFlight.get(k);
   const job=(async()=>{
     try{
       const response=await fetch('/api/model',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({latin:r.latin}),signal:AbortSignal.timeout(24000)});
       if(!response.ok){
         const data=await response.json().catch(()=>({}));
-        modelErrors.set(k,data.reason==='billing'?'OpenAI 项目计费未启用或额度不足，当前显示基础株形。':'AI 服务暂不可用，当前显示基础株形。');
+        const messages={billing:'DeepSeek 账户余额不足。',credentials:'DeepSeek 密钥验证失败。',rate_limit:'DeepSeek 请求频繁，请稍后再试。'};
+        modelErrors.set(k,(messages[data.reason]||'DeepSeek 服务暂不可用。')+'当前显示基础株形。');
         return false;
       }
       const {model}=await response.json();if(!model||!Object.hasOwn(plantProfiles,model.form))return false;
@@ -68,8 +70,8 @@ function detail(r){
   show('<img class="detailArt" alt="观察照片"><div class="body"><div class="eyebrow">'+(r.demo?'图鉴示例':esc(r.provider)||'校园观察')+'</div><h2>'+esc(r.name)+'</h2><i>'+esc(r.latin)+'</i><p>'+esc(r.note||r.family||'')+'</p><div class="recinfo">'+esc(r.date)+' · '+esc(r.location||'未填写地点')+'</div></div>');
   body.querySelector('img').src=r.photo;
   const status=document.createElement('p');status.className='modelnote';status.textContent=(bed(r)==='inside'?'窗台花盆':'窗外植物园')+' · '+(cachedModel(r.latin)?'AI 物种株形':inFlight.has(profileKey(r.latin))?'正在生成 AI 株形':'基础株形');body.querySelector('.body').append(status);
-  if(!r.demo&&!cachedModel(r.latin)&&location.protocol!=='file:'){
-    const retry=document.createElement('button');retry.className='light';retry.textContent='生成 AI 株形';status.after(retry);
+  if(!cachedModel(r.latin)&&location.protocol!=='file:'){
+    const retry=document.createElement('button');retry.className='light';retry.textContent='用 DeepSeek 生成株形';status.after(retry);
     if(modelErrors.has(profileKey(r.latin)))status.textContent=modelErrors.get(profileKey(r.latin));
     retry.onclick=async()=>{retry.disabled=true;status.textContent='生成中…';const ok=await refinePlant(r);status.textContent=ok?'AI 物种株形已保存':modelErrors.get(profileKey(r.latin))||'AI 服务暂不可用，已保留基础株形。';retry.hidden=!!ok;retry.disabled=false};
   }
