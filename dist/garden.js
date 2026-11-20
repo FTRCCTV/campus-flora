@@ -17,23 +17,9 @@ function gardenScene(canvas, inspect) {
     const corners=[[x-w/2,y,z-d/2],[x+w/2,y,z-d/2],[x+w/2,y,z+d/2],[x-w/2,y,z+d/2]];
     loft(corners,corners.map(([x,y,z])=>[x,y+h,z]),colors);
   }
-  const bark=['#92704b','#785535','#ad875b'],gold=['#b5c85e','#9fb449','#d5d76c','#aaba51'],red=['#db8961','#bd6148','#eaaa71','#cb7553'],green=['#86ac77','#699865','#a3c18a','#78a06e'];
-  function crown(x,y,z,r,h,palette,phase){
-    const middle=ring(x,y+h*.44,z,r,r*.87,7,phase);
-    loft(ring(x,y,z,r*.48,r*.40,7,phase+.16),middle,palette);
-    loft(middle,ring(x+.09,y+h,z-.06,r*.23,r*.2,7,phase+.25),palette.slice(1).concat(palette[0]));
-  }
+  const bark=['#92704b','#785535','#ad875b'];
   function tree(x,z,record){
-    const species=record.latin.toLowerCase();
-    const type=species.startsWith('ginkgo ')?0:species.startsWith('acer ')?1:species.startsWith('salix ')?2:3;
-    const palette=[gold,red,green,['#72ad80','#59936c','#93bd85','#68996d']][type];
-    loft(ring(x,.03,z,.17,.17,7),ring(x,1.55,z,.09,.09,7),bark);
-    for(let i=0;i<5;i++){
-      const a=i*2.4,dx=Math.cos(a)*.48,dz=Math.sin(a)*.48,y=1.05+.13*i;
-      loft(ring(x,y-.4,z,.09,.09,5),ring(x+dx,y+.24,z+dz,.05,.05,5),bark);
-      crown(x+dx,type===2?.61:y,z+dz,type===2?.41:.54,type===2?1.38:.8,palette,a);
-    }
-    crown(x,1.68,z,type===0?.62:.57,type===0?1.18:.84,palette,.1);
+    for(const {vertices,color} of specimenMesh(record))face(vertices.map(([px,py,pz])=>[px+x,py+.08,pz+z]),color);
   }
   function build(records){
     meshes=[];active=-1;layer=0;
@@ -80,3 +66,4 @@ function gardenScene(canvas, inspect) {
   $('larger').onclick=()=>resize(1.2);$('smaller').onclick=()=>resize(1/1.2);$('resetView').onclick=()=>{angle=.68;pitch=.53;zoom=1;draw()};
   new ResizeObserver(draw).observe(canvas);return build;
 }
+
