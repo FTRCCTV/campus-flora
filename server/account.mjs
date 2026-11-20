@@ -1,4 +1,4 @@
-import {currentUser,wechatEnabled} from './auth.mjs';
+import {currentUser} from './auth.mjs';
 function checkGarden(items){
   if(!Array.isArray(items)||items.length>800)return false;
   const ids=new Set(), positions=new Set();
@@ -34,7 +34,7 @@ export async function accountGarden(request,env){
   if(!['GET','PUT'].includes(method))return send({error:'method'},405);
   try{
     const user=await currentUser(request,env);
-    if(!user)return method==='GET'?send({user:null,wechat:wechatEnabled(env)}):send({error:'请先登录账号。'},401);
+    if(!user)return method==='GET'?send({user:null}):send({error:'请先登录账号。'},401);
     const objectKey='gardens/v1/'+encodeURIComponent(user.id)+'.json';
     if(method==='GET'){
       const object=await env.BUCKET.get(objectKey);

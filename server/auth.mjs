@@ -1,5 +1,4 @@
 const sessionName='__Host-flora_session';
-const stateName='__Host-flora_wechat';
 const sessionSeconds=30*86400;
 const encoder=new TextEncoder();
 const hex=bytes=>Array.from(new Uint8Array(bytes),b=>b.toString(16).padStart(2,'0')).join('');
@@ -7,10 +6,10 @@ const randomKey=()=>hex(crypto.getRandomValues(new Uint8Array(32)));
 const keyHash=async text=>hex(await crypto.subtle.digest('SHA-256',encoder.encode(text)));
 const cookie=(name,value,seconds)=>name+'='+value+'; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age='+seconds;
 const readCookie=(req,name)=>req.headers.get('Cookie')?.split(';').map(s=>s.trim()).find(s=>s.startsWith(name+'='))?.slice(name.length+1)||'';
-export const wechatEnabled=env=>Boolean(env.WECHAT_APP_ID&&env.WECHAT_APP_SECRET);
 function authJson(data,status=200,headers={}){
   return Response.json(data,{status,headers:{'Cache-Control':'private, no-store','Vary':'Cookie',...headers}});
 }
+const nameKey=async name=>'auth/names/'+await keyHash(name.toLowerCase());
 async function sessionKey(request){
   const token=readCookie(request,sessionName);
   return /^[a-f0-9]{64}$/.test(token)?'auth/sessions/'+await keyHash(token):null;
@@ -22,11 +21,15 @@ export async function currentUser(request,env){
   if(!item)return null;
   const session=await item.json();
   if(session.until<=Date.now()){await env.BUCKET.delete(key);return null}
-  return session.user;
+  const obj=await env.BUCKET.get(await nameKey(session.user.name));
+  if(!obj)return null;
+  const account=await obj.json();
+  if(account.user.id!==session.user.id||account.revision!==session.revision)return null;
+  return account.user;
 }
-async function startSession(user,env){
+async function startSession(user,env,revision){
   const token=randomKey();
-  await env.BUCKET.put('auth/sessions/'+await keyHash(token),JSON.stringify({user,until:Date.now()+sessionSeconds*1000}));
+  await env.BUCKET.put('auth/sessions/'+await keyHash(token),JSON.stringify({user,revision,until:Date.now()+sessionSeconds*1000}));
   return cookie(sessionName,token,sessionSeconds);
 }
 async function passwordKey(password,salt){
@@ -55,12 +58,14 @@ async function credentials(request,env,action){
   const body=await request.text();
   if(body.length>4096)return authJson({error:'输入过长。'},413);
   let input;try{input=JSON.parse(body)}catch{return authJson({error:'输入格式有误。'},400)}
-  const name=typeof input?.name==='string'?input.name.trim().normalize('NFKC'):'';
+  const owner=action==='password'?await currentUser(request,env):null;
+  if(action==='password'&&!owner)return authJson({error:'请重新登录后修改密码。'},401);
+  const name=owner?owner.name:typeof input?.name==='string'?input.name.trim().normalize('NFKC'):'';
   const password=input?.password;
   if(!/^[\p{L}\p{N}_-]{2,24}$/u.test(name)||typeof password!=='string'||password.length<8||password.length>128)
     return authJson({error:'用户名需为 2–24 个文字、数字、下划线或短横线，密码需为 8–128 个字符。'},400);
-  const key='auth/names/'+await keyHash(name.toLowerCase());
-  let user;
+  const key=await nameKey(name);
+  let user,revision;
   if(action==='register'){
     const salt=randomKey(),digest=await passwordKey(password,salt);
     user={id:'flora-'+crypto.randomUUID(),name};
@@ -73,38 +78,18 @@ async function credentials(request,env,action){
     const expected=record?.digest||'0'.repeat(64);
     for(let i=0;i<64;i++)difference|=digest.charCodeAt(i)^expected.charCodeAt(i);
     if(!record||difference)return authJson({error:'用户名或密码有误。'},401);
-    user=record.user;
+    user=record.user;revision=record.revision;
+    if(action==='password'){
+      const next=input.newPassword;
+      if(typeof next!=='string'||next.length<8||next.length>128||next===password)
+        return authJson({error:'请输入与当前密码不同的 8–128 位新密码。'},400);
+      const salt=randomKey(),digest=await passwordKey(next,salt);
+      revision=crypto.randomUUID();
+      const saved=await env.BUCKET.put(key,JSON.stringify({user,salt,digest,revision}),{onlyIf:new Headers({'If-Match':obj.httpEtag})});
+      if(!saved)return authJson({error:'密码已在其他设备修改，请重新登录。'},409);
+    }
   }
-  return authJson({ok:true},200,{'Set-Cookie':await startSession(user,env)});
-}
-function wechatRedirect(location,cookies=[]){
-  const headers=new Headers({location,'Cache-Control':'no-store','Referrer-Policy':'no-referrer'});
-  for(const value of cookies)headers.append('Set-Cookie',value);
-  return new Response(null,{status:303,headers});
-}
-async function wechatAuth(request,env,path){
-  if(!wechatEnabled(env))return authJson({error:'微信登录尚未开放。'},503);
-  const url=new URL(request.url);
-  if(path==='wechat'){
-    const state=randomKey(),qr=new URL('https://open.weixin.qq.com/connect/qrconnect');
-    qr.search=new URLSearchParams({appid:env.WECHAT_APP_ID,redirect_uri:url.origin+'/api/auth/wechat/callback',response_type:'code',scope:'snsapi_login',state}).toString();
-    qr.hash='wechat_redirect';
-    return wechatRedirect(qr.href,[cookie(stateName,state,600)]);
-  }
-  const state=url.searchParams.get('state'),code=url.searchParams.get('code');
-  const clear=cookie(stateName,'',0);
-  const failed=()=>wechatRedirect('/?login=wechat-failed#garden',[clear]);
-  if(!state||!/^[a-f0-9]{64}$/.test(state)||state!==readCookie(request,stateName)||!code||code.length>256)return failed();
-  try{
-    const exchange=new URL('https://api.weixin.qq.com/sns/oauth2/access_token');
-    exchange.search=new URLSearchParams({appid:env.WECHAT_APP_ID,secret:env.WECHAT_APP_SECRET,code,grant_type:'authorization_code'}).toString();
-    const res=await fetch(exchange,{redirect:'error',signal:AbortSignal.timeout(10000)});
-    if(!res.ok)return failed();
-    const data=await res.json();
-    if(data.errcode||typeof data.openid!=='string'||!data.openid||!data.access_token)return failed();
-    const user={id:'wx-'+await keyHash(env.WECHAT_APP_ID+'|'+data.openid),name:'微信用户'};
-    return wechatRedirect('/#garden',[clear,await startSession(user,env)]);
-  }catch{return failed()}
+  return authJson({ok:true},200,{'Set-Cookie':await startSession(user,env,revision)});
 }
 export async function publicAuth(request,env,path){
   try{
@@ -121,11 +106,7 @@ export async function publicAuth(request,env,path){
       const prior=await env.BUCKET.get(key);
       return prior?authJson({records:await prior.json()}):authJson({},404);
     }
-    if(path==='wechat'||path==='wechat/callback'){
-      if(request.method!=='GET')return authJson({error:'请求方式有误。'},405);
-      return await wechatAuth(request,env,path);
-    }
-    if(!['login','register','logout'].includes(path))return authJson({error:'接口不存在。'},404);
+    if(!['login','register','logout','password'].includes(path))return authJson({error:'接口不存在。'},404);
     if(request.method!=='POST')return authJson({error:'需要 POST 请求。'},405);
     if(request.headers.get('Origin')!==new URL(request.url).origin)return authJson({error:'请求来源不匹配。'},403);
     if(path==='logout'){

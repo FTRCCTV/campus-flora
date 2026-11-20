@@ -2,7 +2,6 @@ const fileDemo=location.protocol==='file:';
 const gardenAccount={mode:fileDemo?'guest':'loading',user:null,records:[],version:'new'};
 let sessionEpoch=0, saveBusy=false;
 const accountButton=document.getElementById('account');
-let offerWechat=false;
 
 function setAccountButton(){
   accountButton.textContent=gardenAccount.user?'我的账号':({loading:'连接中',failed:'重连账号',guest:fileDemo?'离线模式':'登录 / 注册'})[gardenAccount.mode];
@@ -16,7 +15,6 @@ async function refreshAccount({silent=false}={}){
     const data=await res.json();
     if(!res.ok)throw Error(data.error);
     if(epoch!==sessionEpoch)return;
-    offerWechat=Boolean(data.wechat);
     const changed=previous!==data.user?.id;
     Object.assign(gardenAccount,{mode:data.user?'member':'guest',user:data.user||null,records:data.records||[],version:data.version||'new'});
     if(changed&&modal.open)modal.close();
@@ -48,7 +46,7 @@ async function saveMemberGarden(update){
 }
 function loginPanel(register=false){
   const title=register?'创建植迹账号':'登录植迹';
-  show('<div class="body accountPanel"><h2>'+title+'</h2><p>用自己的账号，在不同设备上打理同一座花园。</p><form id="gardenLogin" class="authForm"><label>用户名<input id="gardenUsername" name="username" autocomplete="username" required minlength="2" maxlength="24" placeholder="2–24 个字，可用中文"></label><label>密码<input name="password" type="password" autocomplete="'+(register?'new-password':'current-password')+'" minlength="8" maxlength="128" required placeholder="至少 8 个字符"></label><p id="authError" role="status"></p><button class="primary">'+(register?'注册并进入花园':'登录')+'</button></form><div class="authOptions"><button class="smallBtn" id="toggleAuth">'+(register?'已有账号，去登录':'创建新账号')+'</button>'+(offerWechat?'<a class="light" target="_top" href="/api/auth/wechat">微信扫码登录</a>':'')+'<button class="smallBtn" id="stayLocal">继续游客体验</button></div></div>');
+  show('<div class="body accountPanel"><h2>'+title+'</h2><p>用自己的账号，在不同设备上打理同一座花园。</p><form id="gardenLogin" class="authForm"><label>用户名<input id="gardenUsername" name="username" autocomplete="username" required minlength="2" maxlength="24" placeholder="2–24 个字，可用中文"></label><label>密码<input name="password" type="password" autocomplete="'+(register?'new-password':'current-password')+'" minlength="8" maxlength="128" required placeholder="至少 8 个字符"></label><p id="authError" role="status"></p><button class="primary">'+(register?'注册并进入花园':'登录')+'</button></form><div class="authOptions"><button class="smallBtn" id="toggleAuth">'+(register?'已有账号，去登录':'创建新账号')+'</button><button class="smallBtn" id="stayLocal">继续游客体验</button></div></div>');
   $('stayLocal').onclick=()=>modal.close();
   $('toggleAuth').onclick=()=>loginPanel(!register);
   const form=$('gardenLogin'),error=$('authError');
@@ -67,6 +65,27 @@ function loginPanel(register=false){
     finally{button.disabled=false}
   };
 }
+function passwordPanel(){
+  show('<div class="body accountPanel"><h2>修改密码</h2><p>修改后，其他设备需要用新密码重新登录。</p><form id="passwordForm" class="authForm"><label>当前密码<input name="current" type="password" autocomplete="current-password" required maxlength="128"></label><label>新密码<input name="next" type="password" autocomplete="new-password" minlength="8" maxlength="128" placeholder="至少 8 个字符" required></label><label>再次输入新密码<input name="confirm" type="password" autocomplete="new-password" maxlength="128" required></label><p role="status" id="passwordFeedback"></p><button class="primary">保存新密码</button></form><button class="light" id="backToAccount">返回我的账号</button></div>');
+  $('backToAccount').onclick=accountPanel;
+  const form=$('passwordForm'),feedback=$('passwordFeedback');
+  form.onsubmit=async event=>{
+    event.preventDefault();
+    const {current,next,confirm}=form.elements;
+    if(next.value!==confirm.value){feedback.textContent='两次输入的新密码不一致。';confirm.focus();return}
+    const button=form.querySelector('button');
+    if(button.disabled)return;
+    button.disabled=true;feedback.textContent='正在保存…';
+    try{
+      const response=await fetch('/api/auth/password',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:current.value,newPassword:next.value}),signal:AbortSignal.timeout(20000)});
+      const data=await response.json();
+      if(!response.ok)throw Error(data.error||'密码修改失败。');
+      form.reset();await refreshAccount();
+      if(gardenAccount.user){accountPanel();$('accountFeedback').textContent='密码已更新。'}
+    }catch(error){feedback.textContent=error.message||'连接失败，请重试。'}
+    finally{button.disabled=false}
+  };
+}
 function accountPanel(){
   const {mode,user}=gardenAccount;
   if(mode==='failed'){refreshAccount();return}
@@ -78,7 +97,8 @@ function accountPanel(){
   let guest=[];try{guest=localGarden()}catch{}
   const ids=new Set(gardenAccount.records.map(r=>r.uid));
   const pending=guest.filter(r=>!ids.has(r.uid));
-  show('<div class="body accountPanel"><h2>'+esc(user.name)+'</h2><h3>账号花园</h3><p>已保存 '+gardenAccount.records.length+' 条观察。种植、调整和移除均同步到此账号。</p><h3>本机记录</h3><p>'+ (pending.length?'可导入 '+pending.length+' 条本机观察。已占用的位置会调整到同一区域的空位。':'没有待导入的本机记录。')+'</p><button class="primary" id="importGarden">导入本机花园</button><p role="status" id="accountFeedback"></p><button class="light" id="endSession">退出账号</button></div>');
+  show('<div class="body accountPanel"><h2>'+esc(user.name)+'</h2><h3>账号花园</h3><p>已保存 '+gardenAccount.records.length+' 条观察。种植、调整和移除均同步到此账号。</p><h3>本机记录</h3><p>'+ (pending.length?'可导入 '+pending.length+' 条本机观察。已占用的位置会调整到同一区域的空位。':'没有待导入的本机记录。')+'</p><button class="primary" id="importGarden">导入本机花园</button><p role="status" id="accountFeedback"></p><button class="light" id="changePassword">修改密码</button><button class="light" id="endSession">退出账号</button></div>');
+  $('changePassword').onclick=passwordPanel;
   $('endSession').onclick=async event=>{
     const button=event.currentTarget;button.disabled=true;
     try{
@@ -121,9 +141,5 @@ function accountPanel(){
   }).catch(()=>{});
 }
 accountButton.onclick=accountPanel;
-if(new URLSearchParams(location.search).get('login')==='wechat-failed'){
-  history.replaceState(null,'','/#garden');
-  window.addEventListener('load',()=>toast('微信授权未完成，可重新扫码或使用植迹账号登录。'),{once:true});
-}
 window.addEventListener('pageshow',e=>{if(e.persisted)refreshAccount({silent:true})});
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!document.getElementById('modal').open)refreshAccount({silent:true})});
