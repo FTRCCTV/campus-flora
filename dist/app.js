@@ -31,8 +31,8 @@ async function refinePlant(r){
       }
       const {model}=await response.json();if(!model||!Object.hasOwn(plantProfiles,model.form))return false;
       modelErrors.delete(k);modelCache.set(k,model);try{localStorage.setItem(k,JSON.stringify(model))}catch{}
-      if(owner&&gardenAccount.user?.id===owner){
-        try{await writeGarden(list=>{for(const plant of list)if(profileKey(plant.latin)===k)plant.model=model})}
+      if(owner&&gardenAccount.user?.id===owner&&gardenAccount.records.some(plant=>profileKey(plant.latin)===k)){
+        try{await writeGarden(list=>{for(const plant of list)if(profileKey(plant.latin)===k){plant.model=model;plant.form=model.form}})}
         catch{toast('株形已缓存在本机，云端株形同步未完成。')}
       }
       return true;
@@ -88,8 +88,8 @@ for(const [id,place] of Object.entries(places)){
   const b=document.createElement('button');b.dataset.zone=id;b.textContent=place.name;b.onclick=()=>selectZone(id);$('zones').append(b);
 }
 const drawGarden=gardenScene($('world'),i=>{
-  const r=yardRecords[i];if(!r)return;illustrated?sample(r,{zone:r.zone,slot:r.slot}):detail(r);
-},(zone,slot)=>library({zone,slot}));
+  const r=yardRecords[i];if(!r)return;if(visitingGarden){sharedDetail(r);return}illustrated?sample(r,{zone:r.zone,slot:r.slot}):detail(r);
+},(zone,slot)=>{if(!visitingGarden)library({zone,slot})});
 function drawRooms(){
   const inside=places[zone].room;
   $('stage').classList.toggle('outside',!inside);$('room').inert=!inside;$('world').tabIndex=inside?-1:0;
@@ -102,8 +102,8 @@ function drawRooms(){
   $('pots').replaceChildren();
   for(let i=0;i<Math.max(4,...visible.map(r=>r.slot+2));i++){
     const p=visible.find(r=>r.slot===i),b=document.createElement('button');
-    if(p){const c=document.createElement('canvas'),label=document.createElement('span');paintPot(c,p);label.textContent=(i+1)+' · '+p.name;b.append(c,label);b.onclick=()=>illustrated?sample(p,{zone:indoorZone,slot:i}):detail(p)}
-    else{b.className='empty-slot';b.textContent='＋ '+(i+1);b.setAttribute('aria-label',places[indoorZone].name+'第'+(i+1)+'号空位');b.onclick=()=>library({zone:indoorZone,slot:i})}
+    if(p){const c=document.createElement('canvas'),label=document.createElement('span');paintPot(c,p);label.textContent=(i+1)+' · '+p.name;b.append(c,label);b.onclick=()=>visitingGarden?sharedDetail(p):illustrated?sample(p,{zone:indoorZone,slot:i}):detail(p)}
+    else{b.className='empty-slot';b.disabled=!!visitingGarden;b.textContent=(visitingGarden?'空位 ':'＋ ')+(i+1);b.setAttribute('aria-label',places[indoorZone].name+'第'+(i+1)+'号空位');b.onclick=()=>library({zone:indoorZone,slot:i})}
     $('pots').append(b);
   }
 }
@@ -129,10 +129,16 @@ new MutationObserver(updatePotNav).observe(potStrip,{childList:true});
 function route(){
   const garden=location.hash==='#garden';$('explore').hidden=garden;$('garden').hidden=!garden;
   $('ne').classList.toggle('active',!garden);$('ng').classList.toggle('active',garden);
-  try{collection=readGarden().map(r=>({...r,model:cachedModel(r.latin)}))}catch{collection=[];toast('浏览器暂时无法读取观察记录。')}
-  illustrated=!collection.length;$('qty').textContent=collection.length;
+  if(!garden||visitingGarden?.owner!==gardenAccount.user?.id)visitingGarden=null;
+  const visiting=!!visitingGarden;
+  $('gardenTitle').textContent=visiting?visitingGarden.name+'的植物园':'我的植物园';
+  $('notesTitle').textContent=visiting?'花园里的植物':'观察手记';
+  $('backGarden').hidden=!visiting;$('add').hidden=visiting;$('trial').hidden=visiting;$('friends').hidden=visiting;
+  try{collection=visiting?visitingGarden.plants:readGarden().map(r=>{const model=cachedModel(r.latin)||r.model;return {...r,model,form:plantProfile({...r,model}).form}})}catch{collection=[];toast('浏览器暂时无法读取观察记录。')}
+  illustrated=!visiting&&!collection.length;if(!visiting)$('qty').textContent=collection.length;
   if(!garden){home();return}drawRooms();
-  $('records').replaceChildren(...collection.map(r=>thumbButton(r,()=>detail(r),placementName(r)+' · '+sizes[r.size])));
+  $('records').replaceChildren(...collection.map(r=>thumbButton(r,()=>visiting?sharedDetail(r):detail(r),placementName(r)+' · '+sizes[r.size])));
+  if(visiting&&!collection.length)$('records').textContent='这位花友还没有种下植物。';
   if(illustrated)$('records').innerHTML='<div class="empty"><h2>这里会留下你的观察记录</h2><p>拍下植物，或从图鉴中挑一株试种。</p></div>';
 }
 window.addEventListener('storage',e=>{if(e.key===gardenKey||e.key===null)route()});
@@ -160,9 +166,9 @@ function fillSelect(id,values,selected,placeholder){
 }
 function plantEditor(options,photo,demo,context={}){
   const prev=context.previous,editing=!!context.editUid,replacing=!!context.replaceUid;
-  show('<div class="body"><div class="eyebrow">PLANTING DESK</div><h2>'+(editing?'调整植株':replacing?'确认替换':'种植工作台')+'</h2><div class="pot-choice"><canvas id="previewPlant"></canvas><div><label>植物名称<select id="species"></select></label><i id="taxonomy"></i></div></div><div class="pair"><label>生长形态<select id="habit"></select></label><label>展示体型<select id="size"></select></label></div><div class="pair"><label>种植区域<select id="bed"></select></label><label>种植位置<select id="slot"></select></label></div><label>发现地点（选填）<input id="place" maxlength="60"></label><p id="actionNote"></p><button class="primary" id="save">确定</button><p id="feedback" class="error" role="status"></p></div>');
+  show('<div class="body"><div class="eyebrow">PLANTING DESK</div><h2>'+(editing?'调整植株':replacing?'确认替换':'种植工作台')+'</h2><div class="pot-choice"><canvas id="previewPlant"></canvas><div><label>植物名称<select id="species"></select></label><i id="taxonomy"></i></div></div><label>展示大小<select id="size"></select></label><div class="pair"><label>种植区域<select id="bed"></select></label><label>种植位置<select id="slot"></select></label></div><label>发现地点（选填）<input id="place" maxlength="60"></label><p id="actionNote"></p><button class="primary" id="save">确定</button><p id="feedback" class="error" role="status"></p></div>');
   options.forEach((r,i)=>$('species').add(new Option(r.name+(Number.isFinite(r.score)?' · '+(100*r.score).toFixed(1)+'%':''),i)));
-  fillSelect('habit',habits,editing?prev.form:null,'请选择形态');fillSelect('size',sizes,prev?.size,'请选择体型');
+  fillSelect('size',sizes,prev?.size,'请选择体型');
   fillSelect('bed',Object.fromEntries(Object.entries(places).map(([k,v])=>[k,v.name])),context.zone||prev?.zone,'请选择区域');
   $('place').value=editing?prev.location||'':'';
   if(!demo){const img=document.createElement('img');img.src=photo;img.alt='本次观察的原始照片';img.className='observation-photo';body.querySelector('.pot-choice').before(img)}
@@ -181,16 +187,28 @@ function plantEditor(options,photo,demo,context={}){
   function updatePreview(){
     const p=options[Number($('species').value)];$('taxonomy').textContent=p.latin;
     const c=$('previewPlant');
-    if($('habit').value&&$('size').value){paintPot(c,{...p,model:cachedModel(p.latin),form:$('habit').value,size:$('size').value})}
+    if($('size').value){paintPot(c,{...p,model:cachedModel(p.latin)||p.model,size:$('size').value})}
     else{c.width=180;c.height=200;const g=c.getContext('2d');g.fillStyle='#52674e';g.font='16px sans-serif';g.textAlign='center';g.fillText('选好体型后预览',90,105)}
   }
-  slots(context.slot??prev?.slot);updatePreview();
-  $('bed').onchange=()=>slots(null);for(const id of ['species','habit','size'])$(id).onchange=updatePreview;
+  const speciesPicker=$('species');
+  let previewTimer;
+  function selectSpecies(){
+    clearTimeout(previewTimer);updatePreview();
+    const selected=options[Number(speciesPicker.value)];
+    if(demo||fileDemo||cachedModel(selected.latin))return;
+    previewTimer=setTimeout(async()=>{
+      if(!speciesPicker.isConnected||!modal.open)return;
+      await refinePlant(selected);
+      if(speciesPicker.isConnected&&modal.open&&selected===options[Number(speciesPicker.value)])updatePreview();
+    },450);
+  }
+  slots(context.slot??prev?.slot);selectSpecies();
+  $('bed').onchange=()=>slots(null);speciesPicker.onchange=selectSpecies;$('size').onchange=updatePreview;
   $('actionNote').textContent=replacing?'保存后，新植株会替换「'+prev.name+'」及其观察记录。':'';
   $('save').textContent=editing?'保存调整':replacing?'确认替换原植物':'种入我的植物园';
   $('save').onclick=async()=>{
-    const p=options[Number($('species').value)],form=$('habit').value,size=$('size').value,selected=$('bed').value,slotValue=$('slot').value;
-    if(!form||!size||!selected||slotValue===''){$('feedback').textContent='请选择形态、体型、区域和位置。';return}
+    const p=options[Number($('species').value)],form=plantProfile({...p,model:cachedModel(p.latin)||p.model}).form,size=$('size').value,selected=$('bed').value,slotValue=$('slot').value;
+    if(!size||!selected||slotValue===''){$('feedback').textContent='请选择展示大小、区域和位置。';return}
     const slot=Number(slotValue),locationText=$('place').value.trim(),button=$('save');button.disabled=true;
     try{
       await writeGarden(list=>{
@@ -204,7 +222,7 @@ function plantEditor(options,photo,demo,context={}){
       });
       zone=selected;if(places[zone].room)indoorZone=zone;else outdoorZone=zone;
       modal.close();location.hash='garden';route();toast(editing?'调整已保存':replacing?'已替换植物':'已种入花园');
-      if(!demo&&!editing)void refinePlant(p);
+      if(!demo)void refinePlant(p);
     }catch(e){$('feedback').textContent=e.name==='QuotaExceededError'?'浏览器存储已满，本次修改未保存。':e.message;button.disabled=false}
   };
 }

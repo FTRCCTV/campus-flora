@@ -19,8 +19,7 @@ function basicProfile(plant){
   return {form,leaf:leaf||l,bloom:bloom||b,height,spread,count};
 }
 function plantProfile(plant){
-  const profile=plant.model && Object.hasOwn(plantProfiles,plant.model.form)?plant.model:basicProfile(plant);
-  return {...profile,form:Object.hasOwn(plantProfiles,plant.form)?plant.form:profile.form};
+  return plant.model && Object.hasOwn(plantProfiles,plant.model.form)?plant.model:basicProfile(plant);
 }
 const sillExamples=[
   {name:'雏菊',latin:'Bellis perennis',family:'菊科',note:'黄花心周围绕着一圈浅色的小花。'},

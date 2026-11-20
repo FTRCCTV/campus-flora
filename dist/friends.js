@@ -1,0 +1,68 @@
+let visitingGarden=null;
+async function socialRequest(body,visit){
+  const response=await fetch('/api/friends'+(visit?'?visit='+encodeURIComponent(visit):''),{
+    method:body?'POST':'GET',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined,
+    credentials:'same-origin',cache:'no-store',signal:AbortSignal.timeout(15000)
+  });
+  const result=await response.json();
+  if(!response.ok)throw Error(result.error||'好友服务暂不可用。');
+  return result;
+}
+function exitVisit(){
+  visitingGarden=null;zone=indoorZone;route();
+}
+function sharedDetail(plant){
+  show('<div class="body"><h2>'+esc(plant.name)+'</h2><i>'+esc(plant.latin)+'</i><canvas class="friendSpecimen" id="friendSpecimen"></canvas><p>'+esc(placementName(plant))+' · '+esc(sizes[plant.size])+'</p></div>');
+  portrait($('friendSpecimen'),plant);
+}
+async function friendsPanel(message=''){
+  if(!gardenAccount.user){accountPanel();return}
+  const owner=gardenAccount.user.id;
+  show('<div class="body accountPanel"><h2>我的花友</h2><p>同意申请后，双方可以参观彼此的植物和布置。照片、发现地点和手记仅自己可见。</p><form class="authForm" id="friendSearch"><label>好友用户名<input name="friendName" placeholder="输入对方的完整用户名" maxlength="48" required></label><button class="primary">发送好友申请</button></form><p id="socialMessage" role="status"></p><div id="friendList"></div><button class="light" id="refreshFriends">刷新列表</button></div>');
+  const list=$('friendList'),status=$('socialMessage'),form=$('friendSearch');
+  const active=()=>modal.open&&list.isConnected&&gardenAccount.user?.id===owner;
+  status.textContent=message||'正在读取好友列表…';
+  $('refreshFriends').onclick=()=>friendsPanel();
+  async function submit(body,button,success){
+    button.disabled=true;
+    try{await socialRequest(body);if(active())await friendsPanel(success)}
+    catch(e){if(active()){status.textContent=e.message;button.disabled=false}}
+  }
+  form.onsubmit=e=>{e.preventDefault();submit({action:'request',name:form.elements.friendName.value},form.querySelector('button'),'申请已发送。')};
+  function control(row,label,run){
+    const b=document.createElement('button');b.className='smallBtn';b.textContent=label;b.onclick=()=>run(b);row.append(b);
+  }
+  try{
+    const {people}=await socialRequest();if(!active())return;
+    status.textContent=message;
+    if(!people.length){list.textContent='还没有花友。输入同学的用户名，邀请对方来逛花园。';return}
+    for(const [kind,title] of [['received','收到的申请'],['friends','我的好友'],['sent','已发出的申请']]){
+      const group=people.filter(p=>p.status===kind);if(!group.length)continue;
+      const h=document.createElement('h3');h.textContent=title;list.append(h);
+      for(const p of group){
+        const row=document.createElement('div'),name=document.createElement('strong');row.className='friendRow';name.textContent=p.name;row.append(name);list.append(row);
+        const mutate=(b,action,msg)=>submit({action,id:p.id},b,msg);
+        if(kind==='received'){
+          control(row,'同意',b=>mutate(b,'accept','已成为花友。'));
+          control(row,'婉拒',b=>mutate(b,'decline','申请已处理。'));
+        }else if(kind==='sent')control(row,'撤回',b=>mutate(b,'cancel','已撤回申请。'));
+        else{
+          control(row,'逛花园',async b=>{
+            b.disabled=true;
+            try{
+              const garden=await socialRequest(null,p.id);if(!active())return;
+              visitingGarden={...garden,owner,id:p.id};zone=garden.plants[0]?.zone||'sill';
+              if(places[zone].room)indoorZone=zone;else outdoorZone=zone;
+              modal.close();location.hash='garden';route();
+            }catch(e){if(active()){status.textContent=e.message;b.disabled=false}}
+          });
+          control(row,'解除好友',b=>{if(confirm('解除与「'+p.name+'」的好友关系？双方将无法互访。'))mutate(b,'remove','已解除好友关系。')});
+        }
+      }
+    }
+  }catch(e){if(active())status.textContent=e.message}
+}
+document.getElementById('friends').onclick=()=>friendsPanel();
+document.getElementById('backGarden').onclick=exitVisit;
+document.getElementById('ng').addEventListener('click',()=>{if(visitingGarden)exitVisit()});
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&visitingGarden){if(modal.open)modal.close();exitVisit()}});

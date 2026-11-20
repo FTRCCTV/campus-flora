@@ -1,4 +1,5 @@
 const sessionName='__Host-flora_session';
+export {authJson,nameKey,authQuota};
 const sessionSeconds=30*86400;
 const encoder=new TextEncoder();
 const hex=bytes=>Array.from(new Uint8Array(bytes),b=>b.toString(16).padStart(2,'0')).join('');

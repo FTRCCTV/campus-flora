@@ -25,7 +25,7 @@ function localGarden(){
       r.zone=outside?'path':'sill';
     }
     if(!Object.hasOwn(sizes,r.size))r.size='medium';
-    if(!Object.hasOwn(habits,r.form))r.form=legacy.form;
+    r.form=legacy.form;
     if(!Number.isInteger(r.slot)||r.slot<0||list.some(p=>p.zone===r.zone&&p.slot===r.slot))r.slot=nextSlot(list,r.zone);
     list.push(r);
   }
