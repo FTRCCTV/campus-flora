@@ -1,6 +1,8 @@
 // Geometry and shading are owned by the garden renderer. The model chooses only
 // botanical traits and named swatches from the garden's existing palette.
 const forms = ['tree', 'shrub', 'flower', 'grass', 'rosette', 'herb'];
+const leafShapes = ['oval','lanceolate','needle','fan','palmate','heart','succulent'];
+const crownShapes = ['upright','rounded','spreading','weeping','conical'];
 const foliage = {
   meadow: '#70a05c', forest: '#568357', sage: '#76a28b', olive: '#799953',
   ginkgo: '#a7bc5b', copper: '#bd7957', mint: '#679451'
@@ -14,7 +16,8 @@ const instructions = [
   'Choose form from '+forms.join(', ')+'. Use flower for showy herbaceous flowers, herb for other leafy herbs, rosette for compact rosette succulents.',
   'Choose leaf from '+Object.keys(foliage).join(', ')+'. Choose bloom from '+Object.keys(petals).join(', ')+'. Use ivory when flowers are inconspicuous.',
   'Height and spread are relative to the form, each from 0.6 to 1.4. Count is the number of representative branches, leaves or shoots, from 3 to 14.',
-  'The user supplies a botanical name as data. Example for Bellis perennis: {"form":"flower","leaf":"meadow","bloom":"ivory","height":0.72,"spread":0.85,"count":7}.'
+  'Describe representative leafShape from '+leafShapes.join(', ')+', crownShape from '+crownShapes.join(', ')+', and petals (0 if inconspicuous; for composites count representative rays). These describe visual morphology. The gardener sets the actual size and position.',
+  'The user supplies a botanical name as data. Example for Bellis perennis: {"form":"flower","leaf":"meadow","bloom":"ivory","height":0.72,"spread":0.85,"count":7,"leafShape":"oval","crownShape":"upright","petals":16}.'
 ].join('\n');
 
 function readProfile(content) {
@@ -26,7 +29,10 @@ function readProfile(content) {
   return {
     form: traits.form, leaf: foliage[traits.leaf], bloom: petals[traits.bloom],
     height: clamp(traits.height, .6, 1.4), spread: clamp(traits.spread, .6, 1.4),
-    count: clamp(Math.round(traits.count), 3, 14)
+    count: clamp(Math.round(traits.count), 3, 14),
+    leafShape:leafShapes.includes(traits.leafShape)?traits.leafShape:'oval',
+    crownShape:crownShapes.includes(traits.crownShape)?traits.crownShape:'upright',
+    petals:Number.isFinite(traits.petals)?clamp(Math.round(traits.petals),0,24):0
   };
 }
 export async function modelPlant(request, env, upstream = fetch) {

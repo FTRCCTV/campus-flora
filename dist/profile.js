@@ -18,8 +18,10 @@ function basicProfile(plant){
   const [l,b,height,spread,count]=plantProfiles[form];
   return {form,leaf:leaf||l,bloom:bloom||b,height,spread,count};
 }
-function plantProfile(plant){return plant.model?.form in plantProfiles?plant.model:basicProfile(plant)}
-function bed(plant){return plant.bed||(['tree','shrub'].includes(plantProfile(plant).form)?'outside':'inside')}
+function plantProfile(plant){
+  const profile=plant.model && Object.hasOwn(plantProfiles,plant.model.form)?plant.model:basicProfile(plant);
+  return {...profile,form:Object.hasOwn(plantProfiles,plant.form)?plant.form:profile.form};
+}
 const sillExamples=[
   {name:'雏菊',latin:'Bellis perennis',family:'菊科',note:'黄花心周围绕着一圈浅色的小花。'},
   {name:'薄荷',latin:'Mentha canadensis',family:'唇形科',note:'茎上成对生长的叶片，沿枝条向上舒展。'},

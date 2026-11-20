@@ -1,44 +1,203 @@
-function specimenMesh(record,potted=false){
- const m=plantProfile(record),faces=[];
- const face=(vertices,color)=>faces.push({vertices,color});
- const tint=(c,k)=>'#'+[1,3,5].map(i=>Math.min(255,Math.round(parseInt(c.slice(i,i+2),16)*k)).toString(16).padStart(2,'0')).join('');
- const ring=(x,y,z,r,n)=>Array.from({length:n},(_,i)=>[x+r*Math.cos(i*2*Math.PI/n),y,z+r*Math.sin(i*2*Math.PI/n)]);
- function stalk(a,b,r,s,color,n=7){
-   const low=ring(...a,r,n),high=ring(...b,s,n);
-   for(let i=0;i<n;i++){const j=(i+1)%n;face([low[i],low[j],high[j],high[i]],tint(color,.86+.16*Math.cos(i*2*Math.PI/n+.4)))}
-   face(high,color);
- }
- function blade(x,y,z,a,length,rise,width,color){
-   const point=(d,o,h)=>[x+d*Math.cos(a)-o*Math.sin(a),y+h,z+d*Math.sin(a)+o*Math.cos(a)];
-   const base=point(0,0,0),mid=point(length*.48,0,rise*.66+.04),tip=point(length,0,rise);
-   face([base,point(length*.47,width,rise*.48),tip,mid],color);face([base,mid,tip,point(length*.47,-width,rise*.48)],tint(color,.83));
- }
- const start=potted?.59:0;
- if(potted){stalk([0,0,0],[0,.51,0],.29,.43,'#be7654',16);stalk([0,.5,0],[0,.61,0],.46,.46,'#d8946c',16);face(ring(0,.616,0,.409,16),'#674a38')}
- const woody=['tree','shrub'].includes(m.form),h=m.height*(woody?1.65:1),s=m.spread;
- if(woody){
-   const shrub=m.form==='shrub',willow=record.latin.toLowerCase().startsWith('salix ');
-   stalk([0,start,0],[0,start+h*.82,0],shrub?.075:.12,.055,'#946c4f');
-   for(let i=0;i<m.count;i++){
-     const t=i/m.count,a=i*2.4,r=(.49-.3*t)*s,x=r*Math.cos(a),z=r*Math.sin(a),y=start+h*(shrub?.29+.54*t:.42+.56*t);
-     stalk([0,y-h*.18,0],[x,y,z],.052,.024,'#886747',5);
-     const mid=ring(x,y+.1,z,(.43-.13*t)*s,7),top=[x,y+.43*h,z],bottom=[x,y-(willow?.57:.22),z];
-     for(let k=0;k<7;k++){const j=(k+1)%7;face([mid[k],mid[j],top],tint(m.leaf,.89+.15*Math.cos(k)));face([mid[k],bottom,mid[j]],tint(m.leaf,.75+.1*Math.cos(k)))}
-     if(shrub)blade(x,y+.2,z,a,.16,.08,.08,m.bloom);
-   }
- }else for(let i=0;i<m.count;i++){
-   const a=i*2.4,r=.16+.13*Math.sin(i*1.53),x=r*Math.cos(a),z=r*Math.sin(a),height=h*(.58+.2*(1+Math.cos(i*2.12))),y=start+height;
-   if(m.form==='rosette'||m.form==='grass'){blade(0,start,0,a,s*(m.form==='grass'?.32:.52),height*(m.form==='grass'?1:.55),m.form==='grass'?.045:.14,tint(m.leaf,1-.11*(i%3)));continue}
-   stalk([x*.3,start,z*.3],[x,y,z],.023,.014,m.leaf,5);
-   for(let k=1;k<=3;k++)blade(x*.7,start+height*k*.22,z*.7,a+k*2.8,.27*s,.13,m.form==='flower'?.054:.11,tint(m.leaf,.9+k*.04));
-   if(m.form==='flower'){for(let j=0;j<9;j++)blade(x,y,z,j*2*Math.PI/9,.14*s,.035,.048,m.bloom);stalk([x,y,z],[x,y+.045,z],.05,.043,'#ddac41',7)}
- }
- return faces;
+// Leaves are folded along a midrib. The outline is shared by both faces,
+// so changing the camera angle reveals the silhouette as well as its depth.
+const specimenLeaves = {
+  oval: [[0,0],[.19,.63],[.48,1],[.75,.74],[1,0]],
+  lanceolate: [[0,0],[.22,.68],[.42,1],[.79,.45],[1,0]],
+  needle: [[0,0],[.12,.85],[.6,.73],[1,0]],
+  fan: [[0,0],[.2,.12],[.58,.78],[.77,1],[.89,.87],[.96,.64],[.99,.32],[.86,0]],
+  palmate: [[0,0],[.08,.29],[.17,.69],[.23,.41],[.49,1],[.41,.39],[.73,.67],[.59,.18],[1,0]],
+  heart: [[.12,0],[0,.46],[.18,.96],[.44,1],[.73,.54],[1,0]],
+  succulent: [[0,0],[.2,.59],[.54,.95],[.76,1],[.91,.47],[1,0]],
+  spoon: [[0,0],[.26,.18],[.54,.42],[.74,.91],[.89,1],[.98,.51],[1,0]],
+  toothed: [[0,0],[.17,.52],[.24,.44],[.31,.84],[.36,.68],[.45,.97],[.51,.8],[.6,.96],[.63,.73],[.73,.78],[.75,.52],[.86,.45],[1,0]]
+};
+const specimenScales = {
+  small: {ground:1.05, pot:.67},
+  medium: {ground:1.72, pot:1.03},
+  large: {ground:2.4, pot:1.43}
+};
+function meshTint(color, multiplier) {
+  return '#'+[1,3,5].map(i=>Math.min(255,Math.round(parseInt(color.slice(i,i+2),16)*multiplier)).toString(16).padStart(2,'0')).join('');
 }
-function paintPot(canvas,plant){
- const ctx=canvas.getContext('2d');canvas.width=260;canvas.height=280;const shapes=specimenMesh(plant,true);
- const scale=Math.min(117,230/Math.max(...shapes.flatMap(f=>f.vertices.map(v=>v[1]))));
- ctx.fillStyle='#5c503125';ctx.beginPath();ctx.ellipse(132,257,52,8,0,0,Math.PI*2);ctx.fill();
- const projected=shapes.map(f=>{const p=f.vertices.map(([x,y,z])=>[130+(x*.96-z*.28)*scale,254+((x*.28+z*.96)*.19-y*.98)*scale,(x*.28+z*.96)*.98+y*.19]);return {p,color:f.color,d:p.reduce((n,v)=>n+v[2],0)/p.length}}).sort((a,b)=>a.d-b.d);
- for(const {p,color} of projected){ctx.fillStyle=ctx.strokeStyle=color;ctx.lineWidth=.5;ctx.beginPath();p.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y));ctx.closePath();ctx.fill();ctx.stroke()}
+function specimenMesh(record, potted=false) {
+  const m=plantProfile(record), latin=String(record.latin||'').toLowerCase(), genus=latin.split(/\s+/)[0];
+  const tau=2*Math.PI, golden=2.39996, faces=[];
+  const colors=new Map();
+  function tint(color,light) {
+    const key=color+light;
+    if(!colors.has(key))colors.set(key,meshTint(color,light));
+    return colors.get(key);
+  }
+  const face=(vertices,color)=>faces.push({vertices,color});
+  const advance=([x,y,z],a,d,h)=>[x+Math.cos(a)*d,y+h,z+Math.sin(a)*d];
+  function mix(a,b,t){return a.map((v,i)=>v+(b[i]-v)*t)}
+  function tube(a,b,ra,rb,color,n=5) {
+    const [dx,dy,dz]=b.map((v,i)=>v-a[i]),length=Math.hypot(dx,dy,dz);
+    if(length<.0001)return;
+    const axis=[dx/length,dy/length,dz/length],horizontal=Math.hypot(dx,dz);
+    const u=horizontal>.0001?[dz/horizontal,0,-dx/horizontal]:[1,0,0];
+    const v=[axis[1]*u[2],axis[2]*u[0]-axis[0]*u[2],-axis[1]*u[0]];
+    const circle=(point,r)=>Array.from({length:n},(_,i)=>point.map((c,j)=>c+r*(u[j]*Math.cos(tau*i/n)+v[j]*Math.sin(tau*i/n))));
+    const base=circle(a,ra),top=circle(b,rb);
+    for(let i=0;i<n;i++){const j=(i+1)%n;face([base[i],base[j],top[j],top[i]],tint(color,.89+.12*Math.cos(tau*i/n)))}
+    face(top,color);
+  }
+  function leaf(origin,a,length,width,rise,shape,color,fold=.13,tilt=.24) {
+    const edge=specimenLeaves[shape]||specimenLeaves.oval;
+    const point=(t,k,h)=>[
+      origin[0]+length*t*Math.cos(a)-k*width*Math.sin(a),
+      origin[1]+rise*t+width*k*tilt+h*Math.sin(Math.PI*t),
+      origin[2]+length*t*Math.sin(a)+k*width*Math.cos(a)
+    ];
+    const center=point(.51,0,length*fold);
+    const left=edge.map(([t,w])=>point(t,w,0)),right=edge.map(([t,w])=>point(t,-w,0));
+    face([...left,center],color);face([...right,center],tint(color,.85));
+    if(shape==='succulent')face([left[1],left[3],right[3],right[1],point(.45,0,-length*.15)],tint(color,.76));
+  }
+  const green=m.leaf,flower=m.bloom,wood='#876a4e';
+  const leafShape=Object.hasOwn(specimenLeaves,m.leafShape)?m.leafShape:'oval';
+  function leafyTree(kind) {
+    const willow=kind==='willow'||m.crownShape==='weeping';
+    const shrub=kind==='hibiscus'||m.form==='shrub';
+    const spreading=kind==='maple'||m.crownShape==='spreading';
+    const pine=m.crownShape==='conical'||kind==='conifer';
+    const tall=pine?2.15:shrub?1.24:1.86;
+    const trunk=[[0,0,0],[-.05,tall*.35,.02],[.035,tall*.66,-.025],[.015,tall,.01]];
+    for(let i=0;i<3;i++)tube(trunk[i],trunk[i+1],.082-i*.023,.059-i*.021,wood,7);
+    const tiers=Math.max(6,Math.min(11,m.count+2));
+    for(let i=0;i<tiers;i++){
+      const a=golden*i+.22,t=i/tiers,y=tall*(.26+.59*t);
+      const width=(pine?1.05:willow?.98:spreading?.97:shrub?.62:.70)*(.99-.52*t)*m.spread;
+      const base=[.012,y,0],elbow=advance(base,a,width*.49,.22),tip=advance(elbow,a+.12,width*.46,pine?.09:.20);
+      tube(base,elbow,.045-.018*t,.031-.012*t,wood);tube(elbow,tip,.031-.012*t,.011,wood);
+      if(willow){
+        for(let j=0;j<3;j++){
+          const az=a+(j-1)*.49,join=j===1?tip:mix(elbow,tip,.62);
+          const arc=advance(join,az,.16,.07),mid=advance(arc,az,.13,-.35),end=advance(mid,az,-.04,-(.43+.23*Math.sin(i+j)**2));
+          tube(join,arc,.013,.01,wood,4);tube(arc,mid,.01,.006,'#718157',4);tube(mid,end,.006,.003,'#849063',4);
+          for(let k=0;k<6;k++){const point=k<3?mix(arc,mid,k/3):mix(mid,end,(k-3)/3);leaf(point,az+(k%2?1.4:-1.35),.12,.024,-.19,'lanceolate',tint(green,.91+.1*(k%2)))}
+        }
+      }else{
+        for(let j=0;j<2;j++){
+          const az=a+(j===0?-.60:.56),join=j===0?mix(elbow,tip,.56):tip;
+          const end=advance(join,az,.21,pine?.02:.13);
+          tube(join,end,.013,.005,wood,4);
+          const n=pine?8:4;
+          for(let k=0;k<n;k++){
+            const point=mix(join,end,.25+.72*k/(n-1)),dir=az+(k-n/2)*.91;
+            let shape=kind==='ginkgo'?'fan':kind==='maple'?'palmate':pine?'needle':leafShape;
+            const length=pine?.29:kind==='hibiscus'?.24:.29;
+            leaf(point,dir,length,shape==='needle'?.02:shape==='palmate'?.19:shape==='fan'?.185:.11,.105+.065*Math.sin(k+i),shape,tint(green,.92+.06*((i+k)%3)),.09,.44);
+          }
+        }
+        if(kind==='hibiscus'&&i%3===1)flowerHead(tip,a,.28,5,true);
+        if(kind==='shrub'&&m.petals>0&&i%3===1)flowerHead(tip,a,.18,Math.min(24,m.petals),m.petals<=6);
+      }
+    }
+  }
+  // Flower faces tilt toward the side; the petal ring and centre remain
+  // visible at the lower angle used for the shelf as well as from above.
+  function flowerHead(center,a,radius,petals,trumpet=false) {
+    const forward=[Math.cos(a),0,Math.sin(a)],right=[-forward[2],0,forward[0]];
+    const sin=trumpet?.9:.61,cos=Math.sqrt(1-sin*sin);
+    const normal=[sin*forward[0],cos,sin*forward[2]],across=[cos*forward[0],-sin,cos*forward[2]];
+    const point=(x,y,z)=>center.map((c,i)=>c+radius*(x*right[i]+y*across[i]+z*normal[i]));
+    function radial(t,r,w,h){
+      return point(Math.cos(t)*r-Math.sin(t)*w,Math.sin(t)*r+Math.cos(t)*w,h);
+    }
+    const breadth=trumpet?.55:Math.min(.35,2.05/petals);
+    for(let j=0;j<petals;j++){
+      const t=j*tau/petals,raise=trumpet?.25:.055;
+      const a0=radial(t,.09,0,0),l=radial(t,.7,-breadth,raise),u=radial(t,.95,-breadth*.5,raise+.05),v=radial(t,1,breadth*.34,raise+.05),p=radial(t,.73,breadth,raise);
+      const rib=radial(t,.68,0,raise+.09);
+      face([a0,l,u,v,rib],tint(flower,.96+.03*(j%3)));face([a0,rib,v,p],tint(flower,.87));
+    }
+    const disk=Array.from({length:10},(_,i)=>radial(i*tau/10,trumpet?.17:.24,0,.10));
+    face(disk,trumpet?'#995146':'#e1ad42');
+    if(trumpet){
+      const apex=point(.02,.08,.78);tube(center,apex,.012,.009,'#dd9a79');
+      for(let j=0;j<6;j++){const s=radial(j*tau/6,.11,0,.66);tube(s,advance(s,j,.009,.025),.018,.012,'#e7bf58',4)}
+    }
+  }
+  function herbs(kind) {
+    const count=Math.min(12,Math.max(4,m.count));
+    if(kind==='rosette'||kind==='grass'){
+      const rosette=kind==='rosette',rings=rosette?3:2;
+      for(let tier=0;tier<rings;tier++){
+        const n=rosette?Math.max(6,count-tier*2):count;
+        for(let j=0;j<n;j++){
+          const a=tau*j/n+tier*golden,origin=advance([0,tier*.065,0],a,.035,0);
+          const len=rosette?.67-.19*tier:.38+.13*Math.cos(j),rise=rosette?.13+tier*.17:.66+.39*Math.sin(j+tier)**2;
+          leaf(origin,a,len,rosette?.16-.025*tier:.037,rise,rosette?'succulent':'lanceolate',tint(green,.88+.09*(tier+j%2)),rosette?.34:.24);
+        }
+      }
+      return;
+    }
+    const daisy=kind==='daisy',showBloom=daisy||kind==='flower',mint=kind==='mint';
+    if(daisy)for(let j=0;j<11;j++)leaf([0,.035,0],j*golden,.35,.074,.08,'spoon',tint(green,.92+.05*(j%3)));
+    const stems=Math.max(3,Math.min(6,Math.round(count*.63)));
+    for(let j=0;j<stems;j++){
+      const a=golden*j,r=.13+.23*Math.sin(j*1.57)**2,stemH=m.height*(.66+.30*Math.cos(j*1.42)**2);
+      const base=advance([0,.008,0],a,r*.18,0),bend=advance(base,a,r*.42,stemH*.57),tip=advance(bend,a+.26,r*.68,stemH*.43);
+      tube(base,bend,.019,.013,green,mint?4:5);tube(bend,tip,.013,.009,green,mint?4:5);
+      if(!daisy){
+        for(let k=0;k<4;k++){
+          const node=k<2?mix(base,bend,.33+k*.53):mix(bend,tip,(k-2)*.65+.19);
+          for(let side=0;side<2;side++)leaf(node,a+k*Math.PI/2+side*Math.PI,(.31-.037*k)*m.spread,.095-.012*k,.075,mint?'toothed':leafShape,tint(green,.91+.07*((k+side)%3)));
+        }
+      }
+      if(showBloom){
+        const petals=daisy?16:Math.max(3,Math.min(24,Math.round(m.petals||7)));
+        flowerHead(tip,1.15+.52*Math.sin(j*golden),daisy?.18:.21,petals,petals<=6);
+      }
+    }
+  }
+  const speciesForms={
+    ginkgo:['tree','ginkgo'],acer:['tree','maple'],salix:['tree','willow'],
+    bellis:['flower','daisy'],mentha:['herb','mint'],echeveria:['rosette','rosette'],
+    hibiscus:['shrub','hibiscus'],pinus:['tree','conifer']
+  };
+  const known=speciesForms[genus];
+  const kind=known&&known[0]===m.form?known[1]:m.form;
+  if(['ginkgo','maple','willow','hibiscus','conifer','tree','shrub'].includes(kind))leafyTree(kind);
+  else herbs(kind);
+  // Normalize the overall envelope once. Profile height/spread describe the
+  // proportions, while the planted specimen's measured size is always manual.
+  let radius=0,high=0,low=0;
+  for(const f of faces)for(const [x,y,z] of f.vertices){radius=Math.max(radius,Math.hypot(x,z));high=Math.max(high,y);low=Math.min(low,y)}
+  const chosen=specimenScales[record.size]||specimenScales.medium;
+  const scale=(potted?chosen.pot:chosen.ground)/Math.max(.1,high-low,radius*1.65);
+  const soil=potted?.608:0;
+  for(const f of faces)f.vertices=f.vertices.map(([x,y,z])=>[x*scale,(y-low)*scale+soil,z*scale]);
+  if(potted){
+    tube([0,0,0],[0,.50,0],.29,.43,'#bd775a',16);
+    tube([0,.50,0],[0,.607,0],.449,.453,'#cf8f6c',16);
+    face(Array.from({length:16},(_,i)=>[.403*Math.cos(i*tau/16),.608,.403*Math.sin(i*tau/16)]),'#685044');
+  }
+  return faces;
 }
+
+function paintSpecimen(canvas, plant, {potted=false,portrait=true,width=520,height=460}={}) {
+  const ctx=canvas.getContext('2d');canvas.width=width;canvas.height=height;
+  const angle=.34,pitch=.28,ca=Math.cos(angle),sa=Math.sin(angle),cp=Math.cos(pitch),sp=Math.sin(pitch);
+  let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+  const projected=specimenMesh(plant,potted).map(f=>{
+    const p=f.vertices.map(([x,y,z])=>{
+      const depth=x*sa+z*ca,px=x*ca-z*sa,py=depth*sp-y*cp;
+      minX=Math.min(minX,px);maxX=Math.max(maxX,px);minY=Math.min(minY,py);maxY=Math.max(maxY,py);
+      return [px,py,depth*cp+y*sp];
+    });
+    return {p,color:f.color,d:p.reduce((sum,v)=>sum+v[2],0)/p.length};
+  }).sort((a,b)=>a.d-b.d);
+  const scale=portrait?Math.min(width*.82/Math.max(.05,maxX-minX),height*.83/Math.max(.05,maxY-minY)):Math.min(width*.46,height*.427);
+  const left=portrait?width*.5-(maxX+minX)*scale/2:width*.5;
+  const bottom=portrait?height*.51-(maxY+minY)*scale/2:height*.89;
+  ctx.fillStyle='#66564122';ctx.beginPath();ctx.ellipse(left,bottom+height*.008,scale*(potted?.41:.31),scale*.065,0,0,2*Math.PI);ctx.fill();
+  ctx.lineJoin='round';ctx.lineWidth=.36;
+  for(const f of projected){
+    ctx.fillStyle=ctx.strokeStyle=f.color;ctx.beginPath();
+    f.p.forEach(([x,y],i)=>{const px=left+x*scale,py=bottom+y*scale;if(i)ctx.lineTo(px,py);else ctx.moveTo(px,py)});
+    ctx.closePath();ctx.fill();ctx.stroke();
+  }
+}
+function paintPot(canvas,plant){paintSpecimen(canvas,plant,{potted:true,portrait:false,width:300,height:320})}

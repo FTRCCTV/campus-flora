@@ -1,4 +1,4 @@
-const $=id=>document.getElementById(id),modal=$('modal'),body=$('content'),key='cau.flora.records.v1';
+const $=id=>document.getElementById(id),modal=$('modal'),body=$('content'),key=gardenKey;
 const symbols={camera:'<path d="M3 8h4l2-3h6l2 3h4v12H3z"/><circle cx="12" cy="13" r="3.5"/>',image:'<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8" cy="9" r="1"/><path d="m4 17 5-5 4 3 3-4 5 6"/>',leaf:'<path d="M19 4C8 3 3 8 6 15c4 7 15 1 13-11Z M4 21 15 9"/>'};
 const icon=k=>'<svg class="ico" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round">'+symbols[k]+'</svg>';
 document.querySelectorAll('[data-icon]').forEach(el=>el.innerHTML=icon(el.dataset.icon));
@@ -6,7 +6,7 @@ document.querySelectorAll('[data-icon]').forEach(el=>el.innerHTML=icon(el.datase
 let apiKey='', requestController, collection=[], illustrated=false;
 const hosted='https://cau-campus-flora-notebook.bubblybox131.chatgpt.site/';
 const inFlight=new Map(),modelCache=new Map(),modelErrors=new Map();
-const profileKey=latin=>'cau.flora.profile.ds.v1.'+latin.trim().toLowerCase();
+const profileKey=latin=>'cau.flora.profile.ds.v2.'+latin.trim().toLowerCase();
 function cachedModel(latin){
   const k=profileKey(latin);
   if(modelCache.has(k))return modelCache.get(k);
@@ -33,82 +33,161 @@ async function refinePlant(r){
   })();
   inFlight.set(k,job);try{return await job}finally{inFlight.delete(k);route()}
 }
-let outdoors=false, yardRecords=[];
-function setRoom(outside){
-  outdoors=outside;$('stage').classList.toggle('outside',outside);
-  $('room').inert=outside;$('world').tabIndex=outside?0:-1;
-  $('sceneLabel').textContent=(illustrated?'示例 · ':'')+(outside?'窗外植物园':'窗台花园');
-}
-$('windowView').onclick=()=>{setRoom(true);$('returnRoom').focus({preventScroll:true})};
-$('returnRoom').onclick=()=>{setRoom(false);$('windowView').focus({preventScroll:true})};
-function showPot(p,canvas){
-  if(!illustrated){detail(p);return}
-  show('<img class="detailArt" alt="示例花盆"><div class="body"><div class="eyebrow">窗台示例</div><h2>'+p.name+'</h2><i>'+p.latin+'</i><p>'+p.note+'</p><button class="primary" id="sample">将示例种入花盆</button></div>');
-  const photo=canvas.toDataURL('image/png');body.querySelector('img').src=photo;$('sample').onclick=()=>confirmPlant([p],photo,true);
-}
-function drawRooms(){
-  setRoom(outdoors);
-  yardRecords=illustrated?plants:collection.filter(r=>bed(r)==='outside');
-  drawGarden(yardRecords);
-  const pots=illustrated?sillExamples:collection.filter(r=>bed(r)==='inside');
-  $('pots').replaceChildren();
-  pots.forEach(p=>{
-    const b=document.createElement('button'),canvas=document.createElement('canvas'),label=document.createElement('span');
-    paintPot(canvas,p);label.textContent=p.name;b.append(canvas,label);b.onclick=()=>showPot(p,canvas);$('pots').append(b);
-  });
-  if(!pots.length)$('pots').innerHTML='<span class="roomempty">窗台上还有空位</span>';
-}
-function records(){
-  try{return JSON.parse(localStorage.getItem(key)||'[]').map(r=>{const p={...plants[r.id],...r};return {...p,model:p.latin?cachedModel(p.latin):null}}).filter(r=>r.name&&r.latin&&r.photo?.startsWith('data:image/'))}catch{return []}
-}
+let zone='sill', outdoorZone='path', indoorZone='sill', yardRecords=[],heroIndex=0;
 function esc(value){const el=document.createElement('span');el.textContent=String(value??'');return el.innerHTML}
 function show(html){body.innerHTML=html;if(!modal.open)modal.showModal();modal.scrollTop=0}
 $('close').onclick=()=>modal.close();
 modal.addEventListener('close',()=>{if(!modal.open)requestController?.abort()});
-function caption(p){return '<div class="cardFoot"><div><h3>'+esc(p.name)+'</h3><i class="latin">'+esc(p.latin)+'</i></div><span class="mark">'+icon('leaf')+'</span></div>'}
-function detail(r){
-  show('<img class="detailArt" alt="观察照片"><div class="body"><div class="eyebrow">'+(r.demo?'图鉴示例':esc(r.provider)||'校园观察')+'</div><h2>'+esc(r.name)+'</h2><i>'+esc(r.latin)+'</i><p>'+esc(r.note||r.family||'')+'</p><div class="recinfo">'+esc(r.date)+' · '+esc(r.location||'未填写地点')+'</div></div>');
-  body.querySelector('img').src=r.photo;
-  const status=document.createElement('p');status.className='modelnote';status.textContent=(bed(r)==='inside'?'窗台花盆':'窗外植物园')+' · '+(cachedModel(r.latin)?'AI 物种株形':inFlight.has(profileKey(r.latin))?'正在生成 AI 株形':'基础株形');body.querySelector('.body').append(status);
-  if(!cachedModel(r.latin)&&location.protocol!=='file:'){
-    const retry=document.createElement('button');retry.className='light';retry.textContent='用 DeepSeek 生成株形';status.after(retry);
-    if(modelErrors.has(profileKey(r.latin)))status.textContent=modelErrors.get(profileKey(r.latin));
-    retry.onclick=async()=>{retry.disabled=true;status.textContent='生成中…';const ok=await refinePlant(r);status.textContent=ok?'AI 物种株形已保存':modelErrors.get(profileKey(r.latin))||'AI 服务暂不可用，已保留基础株形。';retry.hidden=!!ok;retry.disabled=false};
+function portrait(canvas,r){paintSpecimen(canvas,r,{potted:true,portrait:true,width:480,height:420})}
+function toast(text){$('toast').textContent=text;clearTimeout(toast.timeout);toast.timeout=setTimeout(()=>$('toast').textContent='',2600)}
+function thumbButton(r,action,subtitle){
+  const b=document.createElement('button');b.className='starter';
+  const image=document.createElement(r.photo?'img':'canvas');
+  if(r.photo){image.src=r.photo;image.alt=''}else portrait(image,r);
+  const label=document.createElement('div');label.innerHTML='<strong>'+esc(r.name)+'</strong><i>'+esc(r.latin)+'</i><small>'+esc(subtitle||r.family)+'</small>';
+  b.append(image,label);b.onclick=action;return b;
+}
+function library(context={}){
+  const replace=!!context.replaceUid;
+  show('<div class="body"><div class="eyebrow">PLANT LIBRARY</div><h2>'+(replace?'选择替换植物':'挑选一株植物')+'</h2><div class="pickList" id="choices"></div><button class="light" id="usePhoto">拍照或选择照片</button></div>');
+  samples.forEach(p=>$('choices').append(thumbButton(p,()=>sample(p,context))));
+  $('usePhoto').onclick=()=>guide(context);
+}
+function sample(p,context={}){
+  const canvas=document.createElement('canvas');portrait(canvas,p);
+  plantEditor([p],canvas.toDataURL('image/png'),true,context);
+}
+function home(){
+  const list=collection.length?collection:[sillExamples[0],plants[0],sillExamples[2],plants[1],plants[2],sillExamples[1]];
+  const hero=list[heroIndex%list.length];
+  paintSpecimen($('heroCanvas'),hero,{potted:true,portrait:true,width:620,height:440});
+  $('heroName').textContent=hero.name;$('heroLatin').textContent=hero.latin;
+  $('heroNote').textContent=collection.length?placementName(hero)+' · '+sizes[hero.size]:hero.note;
+  $('heroPlant').setAttribute('aria-label','查看'+hero.name);$('heroPlant').onclick=()=>collection.length?detail(hero):sample(hero);
+  $('heroNext').hidden=list.length<2;
+  $('homeTitle').textContent=collection.length?'最近的观察':'选一株开始试种';
+  $('homeKicker').textContent=collection.length?'RECENT OBSERVATIONS':'PLANTING LIBRARY';
+  const fieldMarks={'银杏':'扇形叶 · 叶端浅裂','鸡爪槭':'掌状叶 · 尖裂片','垂柳':'细枝下垂 · 狭长叶','雏菊':'白色舌状花 · 黄色花心','薄荷':'叶片对生 · 叶缘有齿','拟石莲花':'莲座排列 · 肥厚叶'};
+  $('atlas').replaceChildren(...list.slice(0,6).map(r=>thumbButton(r,()=>collection.length?detail(r):sample(r),collection.length?placementName(r):fieldMarks[r.name])));
+}
+$('heroNext').onclick=()=>{heroIndex++;home()};
+function selectZone(id){
+  zone=id;if(places[id].room)indoorZone=id;else outdoorZone=id;
+  drawRooms();
+}
+$('windowView').onclick=()=>{selectZone(outdoorZone);$('returnRoom').focus({preventScroll:true})};
+$('returnRoom').onclick=()=>{selectZone(indoorZone);$('windowView').focus({preventScroll:true})};
+for(const [id,place] of Object.entries(places)){
+  const b=document.createElement('button');b.dataset.zone=id;b.textContent=place.name;b.onclick=()=>selectZone(id);$('zones').append(b);
+}
+const drawGarden=gardenScene($('world'),i=>{
+  const r=yardRecords[i];if(!r)return;illustrated?sample(r,{zone:r.zone,slot:r.slot}):detail(r);
+},(zone,slot)=>library({zone,slot}));
+function drawRooms(){
+  const inside=places[zone].room;
+  $('stage').classList.toggle('outside',!inside);$('room').inert=!inside;$('world').tabIndex=inside?-1:0;
+  $('room').dataset.zone=indoorZone;$('sceneLabel').textContent=(illustrated?'示例 · ':'')+places[zone].name;
+  for(const b of $('zones').children)b.setAttribute('aria-pressed',b.dataset.zone===zone);
+  yardRecords=illustrated?plants.map((r,i)=>({...r,zone:['path','pond','meadow'][i],slot:0})):collection.filter(r=>!places[r.zone].room);
+  drawGarden(yardRecords,inside?undefined:zone);
+  const pots=illustrated?sillExamples.map((r,i)=>({...r,zone:['sill','bench','shelf'][i],slot:0})):collection;
+  const visible=pots.filter(r=>r.zone===indoorZone);
+  $('pots').replaceChildren();
+  for(let i=0;i<Math.max(4,...visible.map(r=>r.slot+2));i++){
+    const p=visible.find(r=>r.slot===i),b=document.createElement('button');
+    if(p){const c=document.createElement('canvas'),label=document.createElement('span');paintPot(c,p);label.textContent=(i+1)+' · '+p.name;b.append(c,label);b.onclick=()=>illustrated?sample(p,{zone:indoorZone,slot:i}):detail(p)}
+    else{b.className='empty-slot';b.textContent='＋ '+(i+1);b.setAttribute('aria-label',places[indoorZone].name+'第'+(i+1)+'号空位');b.onclick=()=>library({zone:indoorZone,slot:i})}
+    $('pots').append(b);
   }
 }
-const drawGarden=gardenScene($('world'),i=>illustrated?atlasDetail(i):detail(yardRecords[i]));
 function route(){
   const garden=location.hash==='#garden';$('explore').hidden=garden;$('garden').hidden=!garden;
   $('ne').classList.toggle('active',!garden);$('ng').classList.toggle('active',garden);
-  collection=records();illustrated=!collection.length;$('qty').textContent=collection.length;
-  if(!garden)return;
-  drawRooms();
-  $('records').replaceChildren();
-  if(illustrated){$('records').innerHTML='<div class="empty"><h2>种下你的第一株植物</h2><p>点选示例花盆体验种植，或拍下校园里的第一株植物。</p><button class="light" id="first">拍照识植</button></div>';$('first').onclick=guide}
-  collection.forEach(r=>{const b=document.createElement('button');b.className='card';b.innerHTML='<div class="art"><img alt=""><span class="tag">'+(r.demo?'示例记录':'观察记录')+'</span></div>'+caption(r);b.querySelector('img').src=r.photo;b.onclick=()=>detail(r);$('records').append(b)});
+  try{collection=readGarden().map(r=>({...r,model:cachedModel(r.latin)}))}catch{collection=[];toast('浏览器暂时无法读取观察记录。')}
+  illustrated=!collection.length;$('qty').textContent=collection.length;
+  if(!garden){home();return}drawRooms();
+  $('records').replaceChildren(...collection.map(r=>thumbButton(r,()=>detail(r),placementName(r)+' · '+sizes[r.size])));
+  if(illustrated)$('records').innerHTML='<div class="empty"><h2>这里会留下你的观察记录</h2><p>拍下植物，或从图鉴中挑一株试种。</p></div>';
 }
-function atlasDetail(id){
-  const p=plants[id];show('<canvas class="detailArt"></canvas><div class="body"><div class="eyebrow">'+p.family+'</div><h2>'+p.name+'</h2><i>'+p.latin+'</i><p>'+p.note+'</p><button class="primary" id="sample">将图鉴示例种入花园</button></div>');
-  const canvas=body.querySelector('canvas');plate(canvas,id);$('sample').onclick=()=>confirmPlant([p],canvas.toDataURL('image/jpeg',.76),true);
+window.addEventListener('storage',e=>{if(e.key===gardenKey||e.key===null)route()});
+function detail(r){
+  show('<img class="detailArt" alt="观察记录"><div class="body"><div class="eyebrow">'+(r.demo?'图鉴示例':'校园观察')+'</div><h2>'+esc(r.name)+'</h2><i>'+esc(r.latin)+'</i><p>'+esc(r.note||r.family||'')+'</p><div class="recinfo">'+esc(r.date)+' · '+esc(r.location||'未填写发现地点')+'</div><p>'+esc(placementName(r))+' · '+sizes[r.size]+' · '+habits[r.form]+'</p><div class="management"><button id="move">调整体型与位置</button><button id="replace">替换植物</button><button class="danger" id="remove">移除</button></div><p class="modelnote" id="modelStatus"></p></div>');
+  body.querySelector('img').src=r.photo;
+  $('move').onclick=()=>plantEditor([r],r.photo,r.demo,{editUid:r.uid,previous:r});
+  $('replace').onclick=()=>library({replaceUid:r.uid,previous:r,zone:r.zone,slot:r.slot});
+  $('remove').onclick=()=>{
+    show('<div class="body"><h2>移除'+esc(r.name)+'？</h2><p>将删除这条观察记录和照片，并腾出'+esc(placementName(r))+'。</p><div class="management"><button id="cancel">保留植物</button><button class="danger" id="confirmRemove">确认移除</button></div><p role="status" id="feedback"></p></div>');
+    $('cancel').onclick=()=>detail(r);$('confirmRemove').onclick=async()=>{
+      try{await writeGarden(list=>{const i=list.findIndex(x=>x.uid===r.uid);if(i<0)throw Error('这条记录已移除。');list.splice(i,1)});modal.close();route();toast('植物已移除')}catch(e){$('feedback').textContent=e.message}
+    };
+  };
+  const status=$('modelStatus'),k=profileKey(r.latin);status.textContent=cachedModel(r.latin)?'已应用物种模型':modelErrors.get(k)||'当前显示基础模型';
+  if(!cachedModel(r.latin)&&location.protocol!=='file:'){
+    const b=document.createElement('button');b.className='light';b.textContent='细化物种特征';status.after(b);
+    b.onclick=async()=>{b.disabled=true;status.textContent='正在细化植物特征…';const ok=await refinePlant(r);status.textContent=ok?'已应用物种模型':modelErrors.get(k)||'暂时无法生成，请稍后重试。';b.hidden=!!ok;b.disabled=false};
+  }
 }
-plants.forEach((p,id)=>{const b=document.createElement('button');b.className='card';b.innerHTML='<div class="art"><canvas></canvas><span class="tag">'+p.family+'</span></div>'+caption(p);$('atlas').append(b);plate(b.querySelector('canvas'),id);b.onclick=()=>atlasDetail(id)});
-plate($('heroCanvas'),0,true);
-function confirmPlant(options,photo,demo){
-  show('<img class="detailArt" alt="植物记录"><div class="body"><div class="eyebrow">'+(demo?'图鉴示例':'Pl@ntNet · 识别候选')+'</div><h2>确认后种入花园</h2><label>植物名称<select id="species"></select></label><p id="taxonomy"></p><label>种植位置<select id="bed"><option value="">按株形自动安排</option><option value="inside">窗台花盆</option><option value="outside">窗外植物园</option></select></label><label>发现地点（选填）<input id="place" maxlength="60" placeholder="例如：东校区图书馆旁"></label><button class="primary" id="save">种入我的植物园</button><p id="feedback" role="status"></p></div>');
-  body.querySelector('img').src=photo;
+function fillSelect(id,values,selected,placeholder){
+  const el=$(id);if(placeholder)el.add(new Option(placeholder,''));
+  for(const [value,label] of Object.entries(values))el.add(new Option(label,value));
+  el.value=selected||'';
+}
+function plantEditor(options,photo,demo,context={}){
+  const prev=context.previous,editing=!!context.editUid,replacing=!!context.replaceUid;
+  show('<div class="body"><div class="eyebrow">PLANTING DESK</div><h2>'+(editing?'调整植株':replacing?'确认替换':'种植工作台')+'</h2><div class="pot-choice"><canvas id="previewPlant"></canvas><div><label>植物名称<select id="species"></select></label><i id="taxonomy"></i></div></div><div class="pair"><label>生长形态<select id="habit"></select></label><label>展示体型<select id="size"></select></label></div><div class="pair"><label>种植区域<select id="bed"></select></label><label>种植位置<select id="slot"></select></label></div><label>发现地点（选填）<input id="place" maxlength="60"></label><p id="actionNote"></p><button class="primary" id="save">确定</button><p id="feedback" class="error" role="status"></p></div>');
   options.forEach((r,i)=>$('species').add(new Option(r.name+(Number.isFinite(r.score)?' · '+(100*r.score).toFixed(1)+'%':''),i)));
-  $('species').onchange=()=>{const r=options[Number($('species').value)];$('taxonomy').textContent=[r.latin,r.family].filter(Boolean).join(' · ')};$('species').onchange();
-  $('save').onclick=()=>{const p=options[Number($('species').value)];
-    const record={bed:$('bed').value,name:p.name,latin:p.latin,family:p.family,note:p.note,photo,demo,provider:demo?'图鉴示例':'Pl@ntNet',location:$('place').value.trim(),date:new Date().toLocaleDateString('zh-CN')};
-    try{localStorage.setItem(key,JSON.stringify([record,...records()]))}catch{$('feedback').textContent='设备存储不可用或已满，记录未保存。';return}
-    outdoors=bed({...record,model:cachedModel(record.latin)})==='outside';modal.close();location.hash='garden';route();if(!demo)void refinePlant(record);
+  fillSelect('habit',habits,editing?prev.form:null,'请选择形态');fillSelect('size',sizes,prev?.size,'请选择体型');
+  fillSelect('bed',Object.fromEntries(Object.entries(places).map(([k,v])=>[k,v.name])),context.zone||prev?.zone,'请选择区域');
+  $('place').value=editing?prev.location||'':'';
+  if(!demo){const img=document.createElement('img');img.src=photo;img.alt='本次观察的原始照片';img.className='observation-photo';body.querySelector('.pot-choice').before(img)}
+  const originalUid=context.editUid||context.replaceUid;
+  function slots(preferred){
+    const selected=$('bed').value;const el=$('slot');el.replaceChildren(new Option('请选择位置',''));
+    if(!selected)return;
+    const candidates=collection.filter(r=>r.zone===selected&&r.uid!==originalUid);
+    const count=Math.max(6,...candidates.map(r=>r.slot+2),(Number(preferred)||0)+1);
+    for(let n=0;n<count;n++){
+      const other=candidates.find(r=>r.slot===n);
+      const opt=new Option((n+1)+' 号 · '+(other?other.name:'空位'),n);opt.disabled=!!other;el.add(opt);
+    }
+    if(Number.isInteger(preferred))el.value=String(preferred);
+  }
+  function updatePreview(){
+    const p=options[Number($('species').value)];$('taxonomy').textContent=p.latin;
+    const c=$('previewPlant');
+    if($('habit').value&&$('size').value){paintPot(c,{...p,model:cachedModel(p.latin),form:$('habit').value,size:$('size').value})}
+    else{c.width=180;c.height=200;const g=c.getContext('2d');g.fillStyle='#52674e';g.font='16px sans-serif';g.textAlign='center';g.fillText('选好体型后预览',90,105)}
+  }
+  slots(context.slot??prev?.slot);updatePreview();
+  $('bed').onchange=()=>slots(null);for(const id of ['species','habit','size'])$(id).onchange=updatePreview;
+  $('actionNote').textContent=replacing?'保存后，新植株会替换「'+prev.name+'」及其观察记录。':'';
+  $('save').textContent=editing?'保存调整':replacing?'确认替换原植物':'种入我的植物园';
+  $('save').onclick=async()=>{
+    const p=options[Number($('species').value)],form=$('habit').value,size=$('size').value,selected=$('bed').value,slotValue=$('slot').value;
+    if(!form||!size||!selected||slotValue===''){$('feedback').textContent='请选择形态、体型、区域和位置。';return}
+    const slot=Number(slotValue),locationText=$('place').value.trim(),button=$('save');button.disabled=true;
+    try{
+      await writeGarden(list=>{
+        const index=originalUid?list.findIndex(x=>x.uid===originalUid):-1;
+        if(originalUid&&index<0)throw Error('原记录已变更，请重新选择。');
+        if(list.some(r=>r.uid!==originalUid&&r.zone===selected&&r.slot===slot))throw Error('这个位置已被占用，请另选空位。');
+        const data={form,size,zone:selected,slot,location:locationText};
+        if(editing){Object.assign(list[index],data);return}
+        const record={...data,uid:crypto.randomUUID(),name:p.name,latin:p.latin,family:p.family,note:p.note,photo,demo,date:new Date().toLocaleDateString('zh-CN')};
+        if(replacing)list.splice(index,1,record);else list.unshift(record);
+      });
+      zone=selected;if(places[zone].room)indoorZone=zone;else outdoorZone=zone;
+      modal.close();location.hash='garden';route();toast(editing?'调整已保存':replacing?'已替换植物':'已种入花园');
+      if(!demo&&!editing)void refinePlant(p);
+    }catch(e){$('feedback').textContent=e.name==='QuotaExceededError'?'浏览器存储已满，本次修改未保存。':e.message;button.disabled=false}
   };
 }
-function guide(){
+function choosePhoto(input,context={}){input.plantContext=context;input.click()}
+function guide(context={}){
   show('<div class="body"><div class="eyebrow">PL@NTNET</div><h2>拍下身边的植物</h2><p>让叶、花或果实清晰入镜。确认后，照片将发送至 Pl@ntNet 识别。</p><div class="actions"><button class="primary" style="width:auto" id="take">打开相机</button><button class="light" id="choose">选择照片</button></div></div>');
-  $('take').onclick=()=>$('cam').click();$('choose').onclick=()=>$('file').click();
+  $('take').onclick=()=>choosePhoto($('cam'),context);$('choose').onclick=()=>choosePhoto($('file'),context);
 }
-$('shoot').onclick=$('add').onclick=guide;$('album').onclick=()=>$('file').click();
+$('shoot').onclick=$('add').onclick=()=>guide();$('album').onclick=()=>choosePhoto($('file'));$('trial').onclick=()=>library();
 function prepare(file){
   const url=URL.createObjectURL(file);
   return (async()=>{try{
@@ -121,7 +200,7 @@ function prepare(file){
   }finally{URL.revokeObjectURL(url)}})();
 }
 function preview(photo,title,inside){show('<img alt="待识别的植物" class="detailArt"><div class="body"><div class="eyebrow">PL@NTNET</div><h2>'+title+'</h2>'+inside+'</div>');body.querySelector('img').src=photo}
-async function identifyPhoto(item){
+async function identifyPhoto(item,context={}){
   requestController?.abort();const controller=new AbortController();requestController=controller;
   preview(item.photo,'正在辨认植物','<p role="status">正在查询 Pl@ntNet 物种库…</p>');
   try{
@@ -130,21 +209,19 @@ async function identifyPhoto(item){
     const data=await response.json();if(controller.signal.aborted)return;
     if(data.code==='key'){
       preview(item.photo,'连接识别服务','<p>'+esc(data.error)+' 密钥只在当前页面内存中使用。</p><label>Pl@ntNet API Key<input type="password" id="token" autocomplete="off"></label><button class="primary" id="connect">连接并识别</button><p><a href="https://my.plantnet.org/" target="_blank" rel="noopener">获取自己的 Pl@ntNet 密钥</a></p>');
-      $('connect').onclick=()=>{apiKey=$('token').value.trim();if(apiKey)identifyPhoto(item);else $('token').focus()};return;
+      $('connect').onclick=()=>{apiKey=$('token').value.trim();if(apiKey)identifyPhoto(item,context);else $('token').focus()};return;
     }
     if(!response.ok)throw Error(data.error||'识别服务暂时不可用。');
-    if(!data.results.length){preview(item.photo,'未找到匹配植物','<p>请靠近一朵花或一片完整的叶子重新拍摄。</p><button class="light" id="again">换张照片</button>');$('again').onclick=guide;return}
+    if(!data.results.length){preview(item.photo,'未找到匹配植物','<p>请靠近一朵花或一片完整的叶子重新拍摄。</p><button class="light" id="again">换张照片</button>');$('again').onclick=()=>guide(context);return}
     const options=data.results.map(r=>{const known=plants.find(p=>p.latin.startsWith(r.latin+' ')||p.latin===r.latin);return {...r,name:known?.name||r.name,note:known?.note}});
-    confirmPlant(options,item.photo,false);
-  }catch(e){if(controller.signal.aborted)return;preview(item.photo,'这次识别未完成','<p>'+esc(e.message)+'</p><button class="light" id="retry">重新识别</button>');$('retry').onclick=()=>identifyPhoto(item)}
+    plantEditor(options,item.photo,false,context);
+  }catch(e){if(controller.signal.aborted)return;preview(item.photo,'这次识别未完成','<p>'+esc(e.message)+'</p><button class="light" id="retry">重新识别</button>');$('retry').onclick=()=>identifyPhoto(item,context)}
 }
 for(const input of [$('cam'),$('file')])input.onchange=async()=>{
-  const file=input.files[0];input.value='';if(!file)return;
+  const context=input.plantContext||{};input.plantContext=null;const file=input.files[0];input.value='';if(!file)return;
   try{const item=await prepare(file);
     if(location.protocol==='file:'){preview(item.photo,'在线识别植物','<p>离线版支持种植图鉴示例。拍照识别请打开在线版并选择照片。</p><a href="'+hosted+'">打开在线版</a>');return}
-    preview(item.photo,'识别这株植物','<p>将这张照片发送至 Pl@ntNet，获取候选物种。</p><button class="primary" id="identify">开始识别</button>');$('identify').onclick=()=>identifyPhoto(item);
+    preview(item.photo,'识别这株植物','<p>将这张照片发送至 Pl@ntNet，获取候选物种。</p><button class="primary" id="identify">开始识别</button>');$('identify').onclick=()=>identifyPhoto(item,context);
   }catch{show('<div class="body"><h2>照片读取失败</h2><p>请尝试 JPG、PNG 或 WebP 格式。</p></div>')}
 };
 window.addEventListener('hashchange',route);route();
-
-
