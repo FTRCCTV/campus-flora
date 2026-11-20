@@ -107,6 +107,25 @@ function drawRooms(){
     $('pots').append(b);
   }
 }
+const potStrip=$('pots');
+const potNav=[['上一组花盆',-1],['下一组花盆',1]].map(([label,direction])=>{
+  const button=document.createElement('button');
+  button.className='potNav '+(direction<0?'previous':'next');
+  button.setAttribute('aria-label',label);
+  button.setAttribute('aria-controls','pots');
+  button.onclick=()=>potStrip.scrollBy({left:direction*potStrip.clientWidth*.8,behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});
+  $('room').append(button);return button;
+});
+function updatePotNav(){
+  const limit=potStrip.scrollWidth-potStrip.clientWidth;
+  const overflow=potStrip.clientWidth>0&&limit>2;
+  for(const button of potNav)button.hidden=!overflow;
+  potNav[0].disabled=potStrip.scrollLeft<=1;
+  potNav[1].disabled=potStrip.scrollLeft>=limit-1;
+}
+potStrip.addEventListener('scroll',updatePotNav,{passive:true});
+new ResizeObserver(updatePotNav).observe(potStrip);
+new MutationObserver(updatePotNav).observe(potStrip,{childList:true});
 function route(){
   const garden=location.hash==='#garden';$('explore').hidden=garden;$('garden').hidden=!garden;
   $('ne').classList.toggle('active',!garden);$('ng').classList.toggle('active',garden);

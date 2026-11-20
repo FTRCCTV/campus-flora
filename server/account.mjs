@@ -1,14 +1,4 @@
-// Sites supplies verified identity headers after its sign-in flow.
-function visitor(request) {
-  const id=request.headers.get('oai-authenticated-user-id');
-  const email=request.headers.get('oai-authenticated-user-email');
-  if(!id||!email)return null;
-  let name=email.split('@')[0];
-  if(request.headers.get('oai-authenticated-user-full-name-encoding')==='percent-encoded-utf-8'){
-    try{name=decodeURIComponent(request.headers.get('oai-authenticated-user-full-name')||'')||name}catch{}
-  }
-  return {id,email,name};
-}
+import {currentUser,wechatEnabled} from './auth.mjs';
 function checkGarden(items){
   if(!Array.isArray(items)||items.length>800)return false;
   const ids=new Set(), positions=new Set();
@@ -40,12 +30,12 @@ function checkGarden(items){
 }
 export async function accountGarden(request,env){
   const send=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'private, no-store','Vary':'Cookie'}});
-  const user=visitor(request),method=request.method;
+  const method=request.method;
   if(!['GET','PUT'].includes(method))return send({error:'method'},405);
-  if(!user)return method==='GET'?send({user:null}):send({error:'请先登录账号。'},401);
-  if(!env.BUCKET)return send({error:'账号花园存储暂不可用。'},503);
-  const objectKey='gardens/v1/'+encodeURIComponent(user.id)+'.json';
   try{
+    const user=await currentUser(request,env);
+    if(!user)return method==='GET'?send({user:null,wechat:wechatEnabled(env)}):send({error:'请先登录账号。'},401);
+    const objectKey='gardens/v1/'+encodeURIComponent(user.id)+'.json';
     if(method==='GET'){
       const object=await env.BUCKET.get(objectKey);
       return send({user,version:object?.httpEtag||'new',records:object?await object.json():[]});

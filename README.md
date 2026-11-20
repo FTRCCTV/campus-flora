@@ -2,7 +2,7 @@
 
 植迹是为中国农业大学黑客松制作的校园植物观察 Demo。拍下路边的一株植物，确认它的名字，记下发现地点，就能把这次相遇种进自己的三维植物园。小花草可以摆上窗台，乔木和灌木可以种在窗外。
 
-[下载离线演示版](https://github.com/FTRCCTV/campus-flora/releases/latest) · [打开在线植物园（需站点访问权限）](https://cau-campus-flora-notebook.bubblybox131.chatgpt.site/#garden)
+[下载离线演示版](https://github.com/FTRCCTV/campus-flora/releases/latest) · [打开在线植物园](https://cau-campus-flora-notebook.bubblybox131.chatgpt.site/#garden)
 
 ## 第一次体验
 
@@ -22,7 +22,7 @@
 | 生成株形 | 服务端将确认后的学名发送给 DeepSeek Flash，获取叶形、树冠形态、花瓣数、配色和枝叶比例；展示大小由用户选择。同一浏览器再次收录同种植物时复用缓存。 |
 | 绘制花园 | 浏览器将参数转换为低多边形网格并投影到 Canvas。窗台和室外共用色板与明暗规则，支持乔木、灌木、花卉、禾草、莲座和草本六类株形。 |
 
-游客的观察记录保存在当前浏览器，清除站点数据会清空本机花园。在线版右上角可使用 ChatGPT 账号登录或注册；首次登录会自动开通账号花园。登录后，照片、发现地点、植株配置和观察记录会同步到云端。在「我的账号」中点「导入本机花园」可合并游客记录，冲突的种植位会移到同区空位。退出后回到游客模式。离线版可种植图鉴示例；实拍识别和 AI 株形生成需要运行在线服务。
+游客的观察记录保存在当前浏览器，清除站点数据会清空本机花园。在线版右上角可用自选用户名和密码注册植迹账号。启用微信开放平台网站应用后，也可扫码进入独立的微信花园。如果本浏览器仍有旧版平台登录状态，可在「我的账号」里导入旧账号花园。登录后，照片、发现地点、植株配置和观察记录会同步到云端。在「我的账号」中点「导入本机花园」可合并游客记录，冲突的种植位会移到同区空位。退出后回到游客模式。离线版可种植图鉴示例；实拍识别和 AI 株形生成需要运行在线服务。
 
 ## 从源码构建
 
@@ -36,10 +36,11 @@ node build.mjs campus-flora-offline.html
 
 ## 部署在线服务
 
-将 `dist/server/index.js` 部署到支持 ES Module Worker 和 Web Fetch API 的运行环境。入口导出 `fetch(request, env)`，同时提供首页、照片识别和株形生成接口。账号功能使用 Sites 托管登录和名为 `BUCKET` 的 R2 绑定。由平台验证的身份决定用户对象的存储路径；独立部署时应由可信身份代理提供访问者身份并移除客户端同名请求头。浏览器设备通过版本校验避免并发覆盖。请在托管平台的服务端机密配置中设置以下两项。
+将 `dist/server/index.js` 部署到支持 ES Module Worker 和 Web Fetch API 的运行环境。入口导出 `fetch(request, env)`，同时提供首页、照片识别和株形生成接口。植迹账号和花园数据使用名为 `BUCKET` 的 R2 绑定。密码使用随机盐及 PBKDF2-SHA256 派生，会话使用 HTTPS 下的 HttpOnly Cookie，服务端仅存令牌摘要。浏览器设备通过版本校验避免并发覆盖。请在托管平台配置下列运行时变量。
 
 | 配置项 | 用途 |
 | --- | --- |
+| `WECHAT_APP_ID`、`WECHAT_APP_SECRET` | 可选，微信开放平台已开通微信登录的网站应用。在平台登记站点授权回调域，实际回调路径为 `/api/auth/wechat/callback`。两项均配置后显示微信入口。 |
 | `PLANTNET_API_KEY` | `POST /api/identify` 接收 JPEG 照片并返回候选物种 |
 | `DEEPSEEK_API_KEY` | `POST /api/model` 接收含 `latin` 学名字段的 JSON 并返回株形参数 |
 

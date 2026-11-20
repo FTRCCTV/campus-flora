@@ -2,8 +2,7 @@ const fileDemo=location.protocol==='file:';
 const gardenAccount={mode:fileDemo?'guest':'loading',user:null,records:[],version:'new'};
 let sessionEpoch=0, saveBusy=false;
 const accountButton=document.getElementById('account');
-const loginUrl='/signin-with-chatgpt?return_to='+encodeURIComponent('/#garden');
-const logoutUrl='/signout-with-chatgpt?return_to='+encodeURIComponent('/');
+let offerWechat=false;
 
 function setAccountButton(){
   accountButton.textContent=gardenAccount.user?'我的账号':({loading:'连接中',failed:'重连账号',guest:fileDemo?'离线模式':'登录 / 注册'})[gardenAccount.mode];
@@ -17,6 +16,7 @@ async function refreshAccount({silent=false}={}){
     const data=await res.json();
     if(!res.ok)throw Error(data.error);
     if(epoch!==sessionEpoch)return;
+    offerWechat=Boolean(data.wechat);
     const changed=previous!==data.user?.id;
     Object.assign(gardenAccount,{mode:data.user?'member':'guest',user:data.user||null,records:data.records||[],version:data.version||'new'});
     if(changed&&modal.open)modal.close();
@@ -46,27 +46,57 @@ async function saveMemberGarden(update){
     throw error;
   }finally{saveBusy=false;if(reload)await refreshAccount()}
 }
+function loginPanel(register=false){
+  const title=register?'创建植迹账号':'登录植迹';
+  show('<div class="body accountPanel"><h2>'+title+'</h2><p>用自己的账号，在不同设备上打理同一座花园。</p><form id="gardenLogin" class="authForm"><label>用户名<input id="gardenUsername" name="username" autocomplete="username" required minlength="2" maxlength="24" placeholder="2–24 个字，可用中文"></label><label>密码<input name="password" type="password" autocomplete="'+(register?'new-password':'current-password')+'" minlength="8" maxlength="128" required placeholder="至少 8 个字符"></label><p id="authError" role="status"></p><button class="primary">'+(register?'注册并进入花园':'登录')+'</button></form><div class="authOptions"><button class="smallBtn" id="toggleAuth">'+(register?'已有账号，去登录':'创建新账号')+'</button>'+(offerWechat?'<a class="light" target="_top" href="/api/auth/wechat">微信扫码登录</a>':'')+'<button class="smallBtn" id="stayLocal">继续游客体验</button></div></div>');
+  $('stayLocal').onclick=()=>modal.close();
+  $('toggleAuth').onclick=()=>loginPanel(!register);
+  const form=$('gardenLogin'),error=$('authError');
+  form.onsubmit=async event=>{
+    event.preventDefault();
+    const button=form.querySelector('button');if(button.disabled)return;
+    button.disabled=true;error.textContent='';
+    try{
+      const res=await fetch('/api/auth/'+(register?'register':'login'),{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:form.elements.username.value,password:form.elements.password.value}),signal:AbortSignal.timeout(20000)});
+      const data=await res.json();if(!res.ok)throw Error(data.error||'登录失败。');
+      await refreshAccount();
+      if(!gardenAccount.user)throw Error('登录状态未保存，请在本浏览器允许本站 Cookie 后重试。');
+      if(modal.open)modal.close();
+      location.hash='garden';toast(register?'账号已创建，欢迎来到你的花园。':'已登录你的花园。');
+    }catch(e){error.textContent=e.message||'连接失败，请重试。'}
+    finally{button.disabled=false}
+  };
+}
 function accountPanel(){
   const {mode,user}=gardenAccount;
   if(mode==='failed'){refreshAccount();return}
   if(mode!=='member'){
-    const link=fileDemo?hosted:loginUrl;
-    show('<div class="body accountPanel"><div class="eyebrow">MY ACCOUNT</div><h2>'+(fileDemo?'本机花园':'登录你的植物园')+'</h2><p>'+(fileDemo?'离线版将手记保存在当前浏览器。在线版支持账号登录与云端花园。':'使用 ChatGPT 账号继续。首次登录会自动开通植迹花园，换设备也可以查看照片和手记。')+'</p><a class="primary" target="_top" href="'+link+'">'+(fileDemo?'打开在线版':'使用 ChatGPT 登录 / 注册')+'</a><button class="light" id="stayLocal">继续本机体验</button></div>');
+    if(!fileDemo){loginPanel();return}
+    show('<div class="body accountPanel"><h2>本机花园</h2><p>离线版将手记保存在当前浏览器。在线版支持账号登录与云端花园。</p><a class="primary" target="_top" href="'+hosted+'">打开在线版</a><button class="light" id="stayLocal">继续本机体验</button></div>');
     $('stayLocal').onclick=()=>modal.close();return;
   }
   let guest=[];try{guest=localGarden()}catch{}
   const ids=new Set(gardenAccount.records.map(r=>r.uid));
   const pending=guest.filter(r=>!ids.has(r.uid));
-  show('<div class="body accountPanel"><div class="eyebrow">MY ACCOUNT</div><h2>'+esc(user.name)+'</h2><p>'+esc(user.email)+'</p><h3>账号花园</h3><p>已保存 '+gardenAccount.records.length+' 条观察。种植、调整和移除均同步到此账号。</p><h3>本机记录</h3><p>'+ (pending.length?'可导入 '+pending.length+' 条本机观察。已占用的位置会调整到同一区域的空位。':'没有待导入的本机记录。')+'</p><button class="primary" id="importGarden">导入本机花园</button><p role="status" id="accountFeedback"></p><a class="light" target="_top" href="'+logoutUrl+'">退出账号</a></div>');
+  show('<div class="body accountPanel"><h2>'+esc(user.name)+'</h2><h3>账号花园</h3><p>已保存 '+gardenAccount.records.length+' 条观察。种植、调整和移除均同步到此账号。</p><h3>本机记录</h3><p>'+ (pending.length?'可导入 '+pending.length+' 条本机观察。已占用的位置会调整到同一区域的空位。':'没有待导入的本机记录。')+'</p><button class="primary" id="importGarden">导入本机花园</button><p role="status" id="accountFeedback"></p><button class="light" id="endSession">退出账号</button></div>');
+  $('endSession').onclick=async event=>{
+    const button=event.currentTarget;button.disabled=true;
+    try{
+      const res=await fetch('/api/auth/logout',{method:'POST',credentials:'same-origin'});
+      if(!res.ok)throw Error();
+      modal.close();await refreshAccount();
+    }catch{button.disabled=false;$('accountFeedback').textContent='退出失败，请重试。'}
+  };
   const btn=$('importGarden'),feedback=$('accountFeedback');btn.disabled=!pending.length;
-  btn.onclick=async()=>{
-    btn.disabled=true;let added=0;
+  async function mergeRecords(records,trigger){
+    trigger.disabled=true;let added=0;
     try{
       await writeGarden(list=>{
         const existing=new Set(list.map(r=>r.uid)), additions=[];
-        for(const r of pending){
+        for(const source of records){
+          const r=structuredClone(source);
           if(existing.has(r.uid))continue;
-          r.model=cachedModel(r.latin)||r.model;
+          r.model=r.model||cachedModel(r.latin);
           const match=list.concat(additions);
           if(match.some(p=>p.zone===r.zone&&p.slot===r.slot))r.slot=nextSlot(match,r.zone);
           additions.push(r);existing.add(r.uid);
@@ -74,9 +104,26 @@ function accountPanel(){
         added=additions.length;list.unshift(...additions);
       });
       route();accountPanel();$('accountFeedback').textContent='已导入 '+added+' 条观察。';
-    }catch(e){feedback.textContent=e.message;btn.disabled=false}
+    }catch(e){feedback.textContent=e.message;trigger.disabled=false}
   };
+  btn.onclick=()=>mergeRecords(pending,btn);
+  fetch('/api/auth/previous-garden',{method:'HEAD',cache:'no-store'}).then(res=>{
+    if(!res.ok||!btn.isConnected)return;
+    const prior=document.createElement('button');prior.className='light';prior.textContent='导入旧账号花园';btn.after(prior);
+    prior.onclick=async()=>{
+      prior.disabled=true;
+      try{
+        const result=await fetch('/api/auth/previous-garden',{cache:'no-store'});
+        if(!result.ok)throw Error();
+        await mergeRecords((await result.json()).records,prior);
+      }catch{prior.disabled=false;feedback.textContent='读取旧花园失败，请重试。'}
+    };
+  }).catch(()=>{});
 }
 accountButton.onclick=accountPanel;
+if(new URLSearchParams(location.search).get('login')==='wechat-failed'){
+  history.replaceState(null,'','/#garden');
+  window.addEventListener('load',()=>toast('微信授权未完成，可重新扫码或使用植迹账号登录。'),{once:true});
+}
 window.addEventListener('pageshow',e=>{if(e.persisted)refreshAccount({silent:true})});
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!document.getElementById('modal').open)refreshAccount({silent:true})});

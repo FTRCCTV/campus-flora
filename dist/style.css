@@ -8,3 +8,30 @@
 @media(max-width:560px){#heroNote{font-size:12px;line-height:1.45}.exhibit-foot{gap:5px}}
 .room-books,.toolcup{position:absolute;pointer-events:none;display:none}.room[data-zone=shelf] .room-books{display:block;left:3%;bottom:19%;width:56px;transform:rotate(-4deg)}.room-books b{display:block;height:7px;margin:1px;background:#e5d6b2;border-block:2px solid #9b7657;box-shadow:1px 2px 1px #6e563526}.room-books b:nth-child(2){width:89%;border-color:#637b65;transform:rotate(5deg)}.room-books b:last-child{width:94%;border-color:#ae795b}.room[data-zone=bench] .toolcup{display:block;bottom:20%;right:4%;height:34px;width:25px;background:linear-gradient(90deg,#849488,#b6c6b7,#86998b);border-radius:2px 2px 6px 6px}.toolcup b{position:absolute;width:4px;height:31px;background:#977656;left:7px;bottom:26px;transform:rotate(-12deg)}.toolcup b:before{content:"";position:absolute;top:-10px;left:-3px;width:10px;height:15px;background:#899b8e;border-radius:70% 70% 30% 30%}.toolcup b+b{left:17px;transform:rotate(12deg);height:24px}.starter small{line-height:1.4}
 .loginBtn{margin:auto 0;border:1px solid #c2d0bd;color:#32543d;background:#f2f5e9;border-radius:20px;padding:7px 13px;font-size:14px;white-space:nowrap}.accountPanel .primary,.accountPanel .light{margin:5px 4px 5px 0;text-decoration:none}.accountPanel a.primary{color:white}.accountPanel p{overflow-wrap:anywhere}.accountPanel button:disabled{opacity:.55}.accountPanel h3{margin:18px 0 4px}@media(max-width:520px){.bar nav{gap:9px}.bar nav a{font-size:13px}.brand{gap:5px}.brand strong{font-size:21px}.logo{width:30px;height:30px;font-size:28px}.loginBtn{padding:6px 8px;font-size:12px}}
+
+/* Slim botanical scrollbars for the page and observation sheets. */
+:root,dialog,dialog *{scrollbar-color:#829479 #f0f1e8;scrollbar-width:thin}
+@supports selector(::-webkit-scrollbar){
+  :root,dialog,dialog *{scrollbar-color:auto;scrollbar-width:auto}
+  ::-webkit-scrollbar{width:9px;height:8px}
+  ::-webkit-scrollbar-track{background:#f0f1e8;border-radius:12px}
+  ::-webkit-scrollbar-thumb{background:#829479;border:2px solid #f0f1e8;border-radius:12px}
+  ::-webkit-scrollbar-thumb:hover{background:#556e53}
+}
+.pots{left:clamp(38px,6%,70px);right:clamp(38px,6%,70px);scrollbar-width:none;scroll-snap-type:x proximity}
+.pots::-webkit-scrollbar{display:none}
+.pots>button{scroll-snap-align:center}
+.potNav{position:absolute;bottom:10%;width:36px;height:36px;padding:0;display:grid;place-items:center;border-radius:50%;border:1px solid #937b58;background:#fff8e8;color:#3e503d;box-shadow:0 2px 6px #5a43232b}
+.potNav.previous{left:2px}.potNav.next{right:2px}
+.potNav::before{content:"";width:8px;height:8px;border:solid currentColor;border-width:0 2px 2px 0;transform:rotate(-45deg)}
+.potNav.previous::before{transform:rotate(135deg)}
+.potNav:disabled{opacity:.45}
+.potNav:focus-visible,.pots button:focus-visible{outline:3px solid #426946;outline-offset:-3px}
+.authForm{display:grid;gap:14px}
+.authForm label{display:grid;gap:5px;font-size:14px;font-weight:600}
+.authForm input{box-sizing:border-box;width:100%;padding:11px 13px;border:1px solid #a7b799;border-radius:9px;background:#fffefa;color:#253e2d;font:inherit;font-size:16px}
+.authForm input:focus-visible{outline:2px solid #547754;outline-offset:1px}
+.authForm #authError{margin:0;color:#943c2d}
+.authForm #authError:empty{display:none}
+.authOptions{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:12px}
+@media(forced-colors:active){.potNav{border:1px solid ButtonText}:root,dialog,dialog *{scrollbar-color:auto}}
