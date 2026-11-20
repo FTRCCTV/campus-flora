@@ -5,7 +5,7 @@ document.querySelectorAll('[data-icon]').forEach(el=>el.innerHTML=icon(el.datase
 
 let apiKey='', requestController, collection=[], illustrated=false;
 const hosted='https://cau-campus-flora-notebook.bubblybox131.chatgpt.site/';
-const inFlight=new Map(),modelCache=new Map();
+const inFlight=new Map(),modelCache=new Map(),modelErrors=new Map();
 const profileKey=latin=>'cau.flora.profile.v1.'+latin.trim().toLowerCase();
 function cachedModel(latin){
   const k=profileKey(latin);
@@ -19,9 +19,13 @@ async function refinePlant(r){
   const job=(async()=>{
     try{
       const response=await fetch('/api/model',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({latin:r.latin}),signal:AbortSignal.timeout(24000)});
-      if(!response.ok)return false;
+      if(!response.ok){
+        const data=await response.json().catch(()=>({}));
+        modelErrors.set(k,data.reason==='billing'?'OpenAI 项目计费未启用或额度不足，当前显示基础株形。':'AI 服务暂不可用，当前显示基础株形。');
+        return false;
+      }
       const {model}=await response.json();if(!model||!Object.hasOwn(plantProfiles,model.form))return false;
-      modelCache.set(k,model);try{localStorage.setItem(k,JSON.stringify(model))}catch{}
+      modelErrors.delete(k);modelCache.set(k,model);try{localStorage.setItem(k,JSON.stringify(model))}catch{}
       return true;
     }catch{return false}
   })();
@@ -66,7 +70,8 @@ function detail(r){
   const status=document.createElement('p');status.className='modelnote';status.textContent=(bed(r)==='inside'?'窗台花盆':'窗外植物园')+' · '+(cachedModel(r.latin)?'AI 物种株形':inFlight.has(profileKey(r.latin))?'正在生成 AI 株形':'基础株形');body.querySelector('.body').append(status);
   if(!r.demo&&!cachedModel(r.latin)&&location.protocol!=='file:'){
     const retry=document.createElement('button');retry.className='light';retry.textContent='生成 AI 株形';status.after(retry);
-    retry.onclick=async()=>{retry.disabled=true;status.textContent='生成中…';const ok=await refinePlant(r);status.textContent=ok?'AI 物种株形已保存':'AI 服务暂不可用，已保留基础株形。';retry.hidden=!!ok;retry.disabled=false};
+    if(modelErrors.has(profileKey(r.latin)))status.textContent=modelErrors.get(profileKey(r.latin));
+    retry.onclick=async()=>{retry.disabled=true;status.textContent='生成中…';const ok=await refinePlant(r);status.textContent=ok?'AI 物种株形已保存':modelErrors.get(profileKey(r.latin))||'AI 服务暂不可用，已保留基础株形。';retry.hidden=!!ok;retry.disabled=false};
   }
 }
 const drawGarden=gardenScene($('world'),i=>illustrated?atlasDetail(i):detail(yardRecords[i]));
