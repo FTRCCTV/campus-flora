@@ -9,11 +9,14 @@ const inFlight=new Map(),modelCache=new Map(),modelErrors=new Map();
 const profileKey=latin=>'cau.flora.profile.ds.v2.'+latin.trim().toLowerCase();
 function cachedModel(latin){
   const k=profileKey(latin);
+  const saved=gardenAccount.records.find(r=>r.model&&profileKey(r.latin)===k);
+  if(saved)return saved.model;
   if(modelCache.has(k))return modelCache.get(k);
   try{return JSON.parse(localStorage.getItem(k))}catch{return null}
 }
 async function refinePlant(r){
   const k=profileKey(r.latin);
+  const owner=gardenAccount.user?.id;
   if(cachedModel(r.latin))return true;
   if(location.protocol==='file:')return false;
   if(inFlight.has(k))return inFlight.get(k);
@@ -28,6 +31,10 @@ async function refinePlant(r){
       }
       const {model}=await response.json();if(!model||!Object.hasOwn(plantProfiles,model.form))return false;
       modelErrors.delete(k);modelCache.set(k,model);try{localStorage.setItem(k,JSON.stringify(model))}catch{}
+      if(owner&&gardenAccount.user?.id===owner){
+        try{await writeGarden(list=>{for(const plant of list)if(profileKey(plant.latin)===k)plant.model=model})}
+        catch{toast('株形已缓存在本机，云端株形同步未完成。')}
+      }
       return true;
     }catch{return false}
   })();
@@ -173,7 +180,7 @@ function plantEditor(options,photo,demo,context={}){
         if(list.some(r=>r.uid!==originalUid&&r.zone===selected&&r.slot===slot))throw Error('这个位置已被占用，请另选空位。');
         const data={form,size,zone:selected,slot,location:locationText};
         if(editing){Object.assign(list[index],data);return}
-        const record={...data,uid:crypto.randomUUID(),name:p.name,latin:p.latin,family:p.family,note:p.note,photo,demo,date:new Date().toLocaleDateString('zh-CN')};
+        const record={...data,uid:crypto.randomUUID(),name:p.name,latin:p.latin,family:p.family,note:p.note,photo,demo,date:new Date().toLocaleDateString('zh-CN'),model:cachedModel(p.latin)};
         if(replacing)list.splice(index,1,record);else list.unshift(record);
       });
       zone=selected;if(places[zone].room)indoorZone=zone;else outdoorZone=zone;
@@ -224,4 +231,4 @@ for(const input of [$('cam'),$('file')])input.onchange=async()=>{
     preview(item.photo,'识别这株植物','<p>将这张照片发送至 Pl@ntNet，获取候选物种。</p><button class="primary" id="identify">开始识别</button>');$('identify').onclick=()=>identifyPhoto(item,context);
   }catch{show('<div class="body"><h2>照片读取失败</h2><p>请尝试 JPG、PNG 或 WebP 格式。</p></div>')}
 };
-window.addEventListener('hashchange',route);route();
+window.addEventListener('hashchange',route);setAccountButton();route();if(!fileDemo)void refreshAccount();

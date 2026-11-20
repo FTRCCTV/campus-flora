@@ -12,7 +12,7 @@ function nextSlot(list,zone,except){
 }
 // Legacy records had no identities or explicit size. Preserve their previous room once,
 // so a later model refinement can never move an existing planting.
-function readGarden(){
+function localGarden(){
   const raw=JSON.parse(localStorage.getItem(gardenKey)||'[]');
   const list=[];
   for(const [index,old] of raw.entries()){
@@ -31,9 +31,17 @@ function readGarden(){
   }
   return list;
 }
+function readGarden(){
+  if(gardenAccount.user)return structuredClone(gardenAccount.records);
+  return gardenAccount.mode==='guest'?localGarden():[];
+}
 async function writeGarden(update){
-  const write=()=>{
-    const list=readGarden();update(list);localStorage.setItem(gardenKey,JSON.stringify(list));
+  const owner=gardenAccount.user?.id||null;
+  const write=async()=>{
+    if(owner!==(gardenAccount.user?.id||null))throw Error('账号已切换，请重新操作。');
+    if(gardenAccount.mode==='member')return saveMemberGarden(update);
+    if(gardenAccount.mode!=='guest')throw Error('请等账号连接完成，或在账号面板中重试。');
+    const list=localGarden();update(list);localStorage.setItem(gardenKey,JSON.stringify(list));
   };
   if(navigator.locks)await navigator.locks.request(gardenKey,write);else write();
 }
