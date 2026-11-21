@@ -105,7 +105,7 @@ export async function publicAuth(request,env,path){
         return new Response(null,{status:exists?200:404,headers:{'Cache-Control':'private, no-store','Vary':'Cookie'}});
       }
       const prior=await env.BUCKET.get(key);
-      return prior?authJson({records:await prior.json()}):authJson({},404);
+      return prior?authJson(GardenLayout.unpack(await prior.json())):authJson({},404);
     }
     if(!['login','register','logout','password'].includes(path))return authJson({error:'接口不存在。'},404);
     if(request.method!=='POST')return authJson({error:'需要 POST 请求。'},405);

@@ -13,7 +13,7 @@ function nextSlot(list,zone,except){
 // Legacy records had no identities or explicit size. Preserve their previous room once,
 // so a later model refinement can never move an existing planting.
 function localGarden(){
-  const raw=JSON.parse(localStorage.getItem(gardenKey)||'[]');
+  const raw=localDocument().records;
   const list=[];
   for(const [index,old] of raw.entries()){
     const r={...plants[old.id],...old};
@@ -26,11 +26,13 @@ function localGarden(){
     }
     if(!Object.hasOwn(sizes,r.size))r.size='medium';
     r.form=legacy.form;
-    if(!Number.isInteger(r.slot)||r.slot<0||list.some(p=>p.zone===r.zone&&p.slot===r.slot))r.slot=nextSlot(list,r.zone);
-    list.push(r);
+    if(!Number.isFinite(r.x)&&(!Number.isInteger(r.slot)||r.slot<0||list.some(p=>p.zone===r.zone&&p.slot===r.slot)))r.slot=nextSlot(list,r.zone);
+    list.push(GardenLayout.located(r));
   }
   return list;
 }
+function localDocument(){return GardenLayout.unpack(JSON.parse(localStorage.getItem(gardenKey)||'[]'))}
+function readDesign(){return visitingGarden?.design|| (gardenAccount.user?gardenAccount.design:localDocument().design)}
 function readGarden(){
   if(gardenAccount.user)return structuredClone(gardenAccount.records);
   return gardenAccount.mode==='guest'?localGarden():[];
@@ -41,8 +43,10 @@ async function writeGarden(update){
     if(owner!==(gardenAccount.user?.id||null))throw Error('账号已切换，请重新操作。');
     if(gardenAccount.mode==='member')return saveMemberGarden(update);
     if(gardenAccount.mode!=='guest')throw Error('请等账号连接完成，或在账号面板中重试。');
-    const list=localGarden();update(list);localStorage.setItem(gardenKey,JSON.stringify(list));
+    const list=localGarden(),design=localDocument().design;update(list,design);
+    if(!GardenLayout.valid(list,design))throw Error('物品重叠或位置无效。');
+    localStorage.setItem(gardenKey,JSON.stringify({records:list,design}));
   };
   if(navigator.locks)await navigator.locks.request(gardenKey,write);else write();
 }
-function placementName(r){return places[r.zone].name+' · '+(r.slot+1)+' 号位'}
+function placementName(r){return places[r.zone].name}

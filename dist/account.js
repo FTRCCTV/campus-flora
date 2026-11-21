@@ -1,5 +1,5 @@
 const fileDemo=location.protocol==='file:';
-const gardenAccount={mode:fileDemo?'guest':'loading',user:null,records:[],version:'new'};
+const gardenAccount={mode:fileDemo?'guest':'loading',user:null,records:[],design:GardenLayout.empty(),version:'new'};
 let sessionEpoch=0, saveBusy=false;
 const accountButton=document.getElementById('account');
 
@@ -16,12 +16,12 @@ async function refreshAccount({silent=false}={}){
     if(!res.ok)throw Error(data.error);
     if(epoch!==sessionEpoch)return;
     const changed=previous!==data.user?.id;
-    Object.assign(gardenAccount,{mode:data.user?'member':'guest',user:data.user||null,records:data.records||[],version:data.version||'new'});
+    Object.assign(gardenAccount,{mode:data.user?'member':'guest',user:data.user||null,records:data.records||[],design:data.design||GardenLayout.empty(),version:data.version||'new'});
     if(changed&&modal.open)modal.close();
     setAccountButton();route();
   }catch{
     if(epoch!==sessionEpoch)return;
-    Object.assign(gardenAccount,{mode:'failed',user:null,records:[],version:'new'});
+    Object.assign(gardenAccount,{mode:'failed',user:null,records:[],design:GardenLayout.empty(),version:'new'});
     if(modal.open)modal.close();
     setAccountButton();route();if(!silent)toast('账号连接失败，请点击「重连账号」。');
   }
@@ -31,14 +31,15 @@ async function saveMemberGarden(update){
   saveBusy=true;++sessionEpoch;
   let reload=false;
   try{
-    const list=structuredClone(gardenAccount.records);update(list);
+    const list=gardenAccount.records.map(r=>structuredClone(GardenLayout.located(r))),design=structuredClone(gardenAccount.design);update(list,design);
+    if(!GardenLayout.valid(list,design))throw Error('物品重叠或位置无效。');
     const response=await fetch('/api/account',{
       method:'PUT',credentials:'same-origin',cache:'no-store',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({owner:gardenAccount.user.id,version:gardenAccount.version,records:list}),signal:AbortSignal.timeout(30000)
+      body:JSON.stringify({owner:gardenAccount.user.id,version:gardenAccount.version,records:list,design}),signal:AbortSignal.timeout(30000)
     });
     const data=await response.json();
     if(!response.ok){reload=response.status===409||response.status===401;throw Error(data.error||'同步失败，修改未保存。')}
-    gardenAccount.version=data.version;gardenAccount.records=list;
+    gardenAccount.version=data.version;gardenAccount.records=list;gardenAccount.design=design;
   }catch(error){
     if(error instanceof TypeError||error.name==='TimeoutError'){reload=true;throw Error('连接中断，请刷新花园确认保存状态。')}
     throw error;
@@ -97,7 +98,9 @@ function accountPanel(){
   let guest=[];try{guest=localGarden()}catch{}
   const ids=new Set(gardenAccount.records.map(r=>r.uid));
   const pending=guest.filter(r=>!ids.has(r.uid));
-  show('<div class="body accountPanel"><h2>'+esc(user.name)+'</h2><h3>账号花园</h3><p>已保存 '+gardenAccount.records.length+' 条观察。种植、调整和移除均同步到此账号。</p><h3>本机记录</h3><p>'+ (pending.length?'可导入 '+pending.length+' 条本机观察。已占用的位置会调整到同一区域的空位。':'没有待导入的本机记录。')+'</p><button class="primary" id="importGarden">导入本机花园</button><p role="status" id="accountFeedback"></p><button class="light" id="changePassword">修改密码</button><button class="light" id="endSession">退出账号</button></div>');
+  const guestDesign=localDocument().design;
+  const localDecor=guestDesign.decorations.filter(p=>!gardenAccount.design.decorations.some(d=>d.uid===p.uid));
+  show('<div class="body accountPanel"><h2>'+esc(user.name)+'</h2><h3>账号花园</h3><p>已保存 '+gardenAccount.records.length+' 条观察。种植、调整和移除均同步到此账号。</p><h3>本机记录</h3><p>'+ (pending.length||localDecor.length?'可导入 '+pending.length+' 条本机观察和 '+localDecor.length+' 件装饰。位置冲突时会自动挪开。':'没有待导入的本机记录。')+'</p><button class="primary" id="importGarden">导入本机花园</button><p role="status" id="accountFeedback"></p><button class="light" id="changePassword">修改密码</button><button class="light" id="endSession">退出账号</button></div>');
   $('changePassword').onclick=passwordPanel;
   $('endSession').onclick=async event=>{
     const button=event.currentTarget;button.disabled=true;
@@ -107,26 +110,34 @@ function accountPanel(){
       modal.close();await refreshAccount();
     }catch{button.disabled=false;$('accountFeedback').textContent='退出失败，请重试。'}
   };
-  const btn=$('importGarden'),feedback=$('accountFeedback');btn.disabled=!pending.length;
-  async function mergeRecords(records,trigger){
+  const btn=$('importGarden'),feedback=$('accountFeedback');btn.disabled=!pending.length&&!localDecor.length;
+  async function mergeRecords(records,trigger,sourceDesign){
     trigger.disabled=true;let added=0;
     try{
-      await writeGarden(list=>{
+      await writeGarden((list,design)=>{
         const existing=new Set(list.map(r=>r.uid)), additions=[];
         for(const source of records){
           const r=structuredClone(source);
           if(existing.has(r.uid))continue;
           r.model=r.model||cachedModel(r.latin);
           const match=list.concat(additions);
-          if(match.some(p=>p.zone===r.zone&&p.slot===r.slot))r.slot=nextSlot(match,r.zone);
+          Object.assign(r,GardenLayout.place(r,match.concat(design.decorations),GardenLayout.located(r)));
           additions.push(r);existing.add(r.uid);
+        }
+        if(sourceDesign){
+          if(!list.length&&!design.decorations.length){design.scene=sourceDesign.scene;design.weather=sourceDesign.weather}
+          for(const p of sourceDesign.decorations){
+            if(existing.has(p.uid)||design.decorations.some(d=>d.uid===p.uid))continue;
+            const pt=GardenLayout.place(p,list.concat(additions,design.decorations),p);
+            design.decorations.push({...p,...pt});
+          }
         }
         added=additions.length;list.unshift(...additions);
       });
       route();accountPanel();$('accountFeedback').textContent='已导入 '+added+' 条观察。';
     }catch(e){feedback.textContent=e.message;trigger.disabled=false}
   };
-  btn.onclick=()=>mergeRecords(pending,btn);
+  btn.onclick=()=>mergeRecords(pending,btn,guestDesign);
   fetch('/api/auth/previous-garden',{method:'HEAD',cache:'no-store'}).then(res=>{
     if(!res.ok||!btn.isConnected)return;
     const prior=document.createElement('button');prior.className='light';prior.textContent='导入旧账号花园';btn.after(prior);
@@ -135,7 +146,7 @@ function accountPanel(){
       try{
         const result=await fetch('/api/auth/previous-garden',{cache:'no-store'});
         if(!result.ok)throw Error();
-        await mergeRecords((await result.json()).records,prior);
+        const old=await result.json();await mergeRecords(old.records,prior,old.design);
       }catch{prior.disabled=false;feedback.textContent='读取旧花园失败，请重试。'}
     };
   }).catch(()=>{});

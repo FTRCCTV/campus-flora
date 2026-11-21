@@ -1,6 +1,6 @@
 import {currentUser,authJson,nameKey,authQuota} from './auth.mjs';
 
-const displayFields=['name','latin','family','form','size','zone','slot'];
+const displayFields=['name','latin','family','form','size','zone','slot','x','z'];
 const modelFields=['form','leaf','bloom','height','spread','count','leafShape','crownShape','petals'];
 function sharedPlant(plant){
   const entry=Object.fromEntries(displayFields.filter(k=>['string','number'].includes(typeof plant[k])).map(k=>[k,plant[k]]));
@@ -19,7 +19,8 @@ export async function friendsApi(request,env){
         if(!edge)return authJson({error:'当前无法访问这座花园。'},403);
         const outgoing=edge.sender===user.id,peer=outgoing?edge.recipient:edge.sender;
         const garden=await env.BUCKET.get('gardens/v1/'+encodeURIComponent(peer)+'.json');
-        return authJson({name:outgoing?edge.recipient_name:edge.sender_name,plants:garden?(await garden.json()).map(sharedPlant):[]});
+        const {records,design}=GardenLayout.unpack(garden?await garden.json():[]);
+        return authJson({name:outgoing?edge.recipient_name:edge.sender_name,plants:records.map(sharedPlant),design});
       }
       const {results}=await db.prepare('SELECT * FROM garden_friends WHERE sender=? OR recipient=? ORDER BY rowid DESC').bind(user.id,user.id).all();
       return authJson({people:results.map(edge=>{
