@@ -2,7 +2,7 @@
 
 植迹是为中国农业大学黑客松制作的校园植物观察 Demo。拍下路边的一株植物，确认它的名字，记下发现地点，就能把这次相遇种进自己的三维植物园。小花草可以摆上窗台，乔木和灌木可以种在窗外。
 
-[下载离线演示版](https://github.com/FTRCCTV/campus-flora/releases/latest) · [打开在线植物园](https://cau-campus-flora-notebook.bubblybox131.chatgpt.site/#garden)
+[下载离线演示版](https://github.com/FTRCCTV/campus-flora/releases/latest) · [打开 Netlify 植物园](https://cau-campus-flora.netlify.app/#garden)
 
 ## 第一次体验
 
@@ -43,6 +43,14 @@ node build.mjs campus-flora-offline.html
 中国大陆的节点选择、账号数据迁移和校园网验收步骤见[国内部署方案](docs/china-hosting.md)。
 
 ## 部署在线服务
+
+### Netlify
+
+Netlify 站点使用独立的植迹账号和 PostgreSQL 数据库，首次访问请注册。构建命令为 `node netlify/build.mjs`，静态产物在 `netlify-public/`，同域 `/api/*` 由 Netlify Functions 提供。数据库迁移随部署运行。超过 2 MiB 的花园按段传输，最终保存时检查账号和版本，保留原有的 16 MiB 花园容量。
+
+从仓库安装依赖（`npm ci`），在 Netlify 项目的生产环境中配置 `PLANTNET_API_KEY` 和 `DEEPSEEK_API_KEY`。关联项目后使用 `netlify deploy` 构建预览，再用 `netlify deploy --prod` 发布正式站。
+
+### Worker
 
 将 `dist/server/index.js` 部署到支持 ES Module Worker 和 Web Fetch API 的运行环境。入口导出 `fetch(request, env)`，同时提供首页、照片识别和株形生成接口。植迹账号和花园数据使用名为 `BUCKET` 的 R2 绑定。密码使用随机盐及 PBKDF2-SHA256 派生，会话使用 HTTPS 下的 HttpOnly Cookie，服务端仅存令牌摘要。浏览器设备通过版本校验避免并发覆盖。请在托管平台配置下列运行时变量。
 
