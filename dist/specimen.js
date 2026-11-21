@@ -21,6 +21,8 @@ function meshTint(color, multiplier) {
 }
 function specimenMesh(record, potted=false) {
   const m=plantProfile(record), latin=String(record.latin||'').toLowerCase(), genus=latin.split(/\s+/)[0];
+  const palette=record.palette||{};
+  const pigment=(value,fallback)=>typeof value==='string'&&/^#[0-9a-f]{6}$/i.test(value)?value:fallback;
   const tau=2*Math.PI, golden=2.39996, faces=[];
   const colors=new Map();
   function tint(color,light) {
@@ -52,9 +54,29 @@ function specimenMesh(record, potted=false) {
     const center=point(.51,0,length*fold);
     const left=edge.map(([t,w])=>point(t,w,0)),right=edge.map(([t,w])=>point(t,-w,0));
     face([...left,center],color);face([...right,center],tint(color,.85));
-    if(shape==='succulent')face([left[1],left[3],right[3],right[1],point(.45,0,-length*.15)],tint(color,.76));
+    if(shape==='succulent'){
+      const keel=point(.48,0,-length*.18);
+      face([...left,keel],tint(color,.72));face([...right,keel],tint(color,.79));
+      const outer=left[3],glint=mix(outer,center,.13);
+      face([mix(left[2],outer,.6),outer,mix(outer,left[4],.7),glint],tint(color,1.13));
+    }else if(shape==='fan'||shape==='palmate'){
+      // Ribs follow the fan and the maple's lobes. Their width tapers to the margin.
+      const petiole=point(.12,0,length*fold*.4);
+      for(const side of [left,right]){
+        const veinTip=mix(center,side[shape==='fan'?5:6],.78);
+        face([petiole,mix(center,side[2],.11),veinTip],tint(color,1.09));
+      }
+    }else if(width>.045){
+      const base=point(.06,0,length*fold*.7),tip=point(.89,0,length*fold*.71);
+      face([base,point(.50,.045,length*fold*1.025),tip,center],tint(color,1.17));
+      if(shape==='toothed'||shape==='heart'){
+        for(const sign of [-1,1]){
+          face([mix(base,center,.60),center,mix(center,point(.64,sign*.75,0),.9)],tint(color,1.08));
+        }
+      }
+    }
   }
-  const green=m.leaf,flower=m.bloom,wood='#876a4e';
+  const green=pigment(palette.leaf,m.leaf),flower=pigment(palette.bloom,m.bloom),wood='#876a4e';
   const leafShape=Object.hasOwn(specimenLeaves,m.leafShape)?m.leafShape:'oval';
   function leafyTree(kind) {
     const willow=kind==='willow'||m.crownShape==='weeping';
@@ -108,12 +130,21 @@ function specimenMesh(record, potted=false) {
     const breadth=trumpet?.55:Math.min(.35,2.05/petals);
     for(let j=0;j<petals;j++){
       const t=j*tau/petals,raise=trumpet?.25:.055;
-      const a0=radial(t,.09,0,0),l=radial(t,.7,-breadth,raise),u=radial(t,.95,-breadth*.5,raise+.05),v=radial(t,1,breadth*.34,raise+.05),p=radial(t,.73,breadth,raise);
-      const rib=radial(t,.68,0,raise+.09);
-      face([a0,l,u,v,rib],tint(flower,.96+.03*(j%3)));face([a0,rib,v,p],tint(flower,.87));
+      const reach=.96+.045*Math.sin(j*golden);
+      const a0=radial(t,.09,0,0),l=radial(t,.68,-breadth,raise),u=radial(t,reach-.05,-breadth*.73,raise+.055),end=radial(t,reach,0,raise+.072),v=radial(t,reach-.03,breadth*.66,raise+.05),p=radial(t,.71,breadth,raise);
+      const rib=radial(t,.68,0,raise+.10);
+      face([a0,l,u,end,rib],tint(flower,.97+.03*(j%3)));face([a0,rib,end,v,p],tint(flower,.85+.035*(j%2)));
     }
-    const disk=Array.from({length:10},(_,i)=>radial(i*tau/10,trumpet?.17:.24,0,.10));
-    face(disk,trumpet?'#995146':'#e1ad42');
+    const diskRadius=trumpet?.17:.235;
+    const disk=Array.from({length:12},(_,i)=>radial(i*tau/12,diskRadius,0,.115));
+    face(disk,trumpet?'#995146':'#d49835');
+    if(!trumpet){
+      // Small golden florets give the raised flower centre a granular surface at close range.
+      for(let k=0;k<10;k++){
+        const a=k*golden,r=.18*Math.sqrt(k/10),cx=r*Math.cos(a),cy=r*Math.sin(a),h=.125+.06*(1-r/.18);
+        face(Array.from({length:5},(_,n)=>point(cx+.037*Math.cos(n*tau/5),cy+.037*Math.sin(n*tau/5),h)),k%3?'#edbc4c':'#ffe094');
+      }
+    }
     if(trumpet){
       const apex=point(.02,.08,.78);tube(center,apex,.012,.009,'#dd9a79');
       for(let j=0;j<6;j++){const s=radial(j*tau/6,.11,0,.66);tube(s,advance(s,j,.009,.025),.018,.012,'#e7bf58',4)}
@@ -167,12 +198,25 @@ function specimenMesh(record, potted=false) {
   for(const f of faces)for(const [x,y,z] of f.vertices){radius=Math.max(radius,Math.hypot(x,z));high=Math.max(high,y);low=Math.min(low,y)}
   const chosen=specimenScales[record.size]||specimenScales.medium;
   const scale=(potted?chosen.pot:chosen.ground)/Math.max(.1,high-low,radius*1.65);
-  const soil=potted?.608:0;
+  const soil=potted?.578:0;
   for(const f of faces)f.vertices=f.vertices.map(([x,y,z])=>[x*scale,(y-low)*scale+soil,z*scale]);
   if(potted){
-    tube([0,0,0],[0,.50,0],.29,.43,'#bd775a',16);
-    tube([0,.50,0],[0,.607,0],.449,.453,'#cf8f6c',16);
-    face(Array.from({length:16},(_,i)=>[.403*Math.cos(i*tau/16),.608,.403*Math.sin(i*tau/16)]),'#685044');
+    const potRing=(y,r)=>Array.from({length:20},(_,i)=>[r*Math.cos(i*tau/20),y,r*Math.sin(i*tau/20)]);
+    const profile=[[0,.275],[.046,.29],[.052,.307],[.493,.42],[.506,.445],[.57,.453],[.604,.445],[.604,.399],[.578,.393]];
+    const clay=['#a56650','#b77658','#c28060','#ae6d50','#c88966','#d49772','#dba782','#95684e'];
+    const rings=profile.map(([y,r])=>potRing(y,r));
+    for(let band=0;band<rings.length-1;band++){
+      const lower=rings[band],upper=rings[band+1];
+      for(let i=0;i<lower.length;i++){
+        const j=(i+1)%lower.length;
+        face([lower[i],lower[j],upper[j],upper[i]],tint(clay[band],.91+.10*Math.cos(i*tau/lower.length)));
+      }
+    }
+    face(rings[rings.length-1],'#665043');
+    for(let i=0;i<10;i++){
+      const a=i*golden,r=.18+.17*((i*7)%11)/10,x=r*Math.cos(a),z=r*Math.sin(a);
+      face([[x-.013,.58,z],[x-.004,.585,z-.012],[x+.017,.582,z+.003],[x+.004,.58,z+.015]],i%3?'#8e7965':'#ab967c');
+    }
   }
   return faces;
 }

@@ -4,6 +4,7 @@ const displayFields=['name','latin','family','form','size','zone','slot','x','z'
 const modelFields=['form','leaf','bloom','height','spread','count','leafShape','crownShape','petals'];
 function sharedPlant(plant){
   const entry=Object.fromEntries(displayFields.filter(k=>['string','number'].includes(typeof plant[k])).map(k=>[k,plant[k]]));
+  if(plant.palette)entry.palette=Object.fromEntries(['leaf','bloom'].filter(k=>/^#[0-9a-f]{6}$/i.test(plant.palette[k])).map(k=>[k,plant.palette[k]]));
   if(plant.model)entry.model=Object.fromEntries(modelFields.filter(k=>['string','number'].includes(typeof plant.model[k])).map(k=>[k,plant.model[k]]));
   return entry;
 }

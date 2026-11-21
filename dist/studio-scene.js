@@ -4,7 +4,7 @@ const studioPlantMeshes=new Map();
 function studioIndoor(zone){return ['sill','bench','shelf'].includes(zone)}
 function studioPlantAsset(item,zone){
   const indoor=studioIndoor(zone);
-  const key=JSON.stringify([indoor,item.latin,item.family,item.size,item.form,item.model]);
+  const key=JSON.stringify([indoor,item.latin,item.family,item.size,item.form,item.model,item.palette]);
   if(studioPlantMeshes.has(key))return studioPlantMeshes.get(key);
   const faces=specimenMesh(item,indoor);
   let radius=0;
@@ -17,15 +17,8 @@ function studioPlantAsset(item,zone){
 function studioFootprint(item,zone){
   return Object.hasOwn(studioPropRadius,item.kind)?studioPropRadius[item.kind]:studioPlantAsset(item,zone||item.zone).radius;
 }
-function paintStudioScene(canvas,{scene='campus',weather='sunny',zone='path',items=[],angle=.62,zoom=1,selected=null,extent=5}={}){
-  const width=canvas.clientWidth||canvas.width||760,height=canvas.clientHeight||canvas.height||440;
-  const ctx=canvas.getContext('2d'),ratio=canvas.clientWidth?Math.min(2,window.devicePixelRatio||1):1;
-  if(canvas.width!==Math.round(width*ratio)||canvas.height!==Math.round(height*ratio)){
-    canvas.width=Math.round(width*ratio);canvas.height=Math.round(height*ratio);
-  }
-  ctx.setTransform(ratio,0,0,ratio,0,0);
-  const inside=studioIndoor(zone),terrace=scene==='terrace',court=scene==='courtyard';
-  const rainy=weather==='rain',snowy=weather==='snow';
+
+function studioProjection(width,height,angle,zoom,extent){
   const edge=extent+.62, cp=Math.cos(.53),sp=Math.sin(.53),ca=Math.cos(angle),sa=Math.sin(angle);
   const scale=zoom*Math.min(width/(2.92*edge+1.35),height/(1.58*edge+3.4));
   const cx=width*.5,cy=height*.56;
@@ -37,44 +30,9 @@ function paintStudioScene(canvas,{scene='campus',weather='sunny',zone='path',ite
     const u=(px-cx)/scale,v=(py-cy)/(sp*scale);
     return {x:u*ca+v*sa,z:-u*sa+v*ca};
   }
-  const sky=ctx.createLinearGradient(0,0,0,height);
-  const stops=snowy?['#afc0c9','#e7ede8','#d5ded8']:rainy?['#899eaa','#cfdbd6','#b9cabe']:
-    terrace?['#a8d1ce','#f8e7bf','#e1e0c4']:court?['#c4d8c7','#f6ebce','#e2dfc4']:['#b4d8d3','#f5edcd','#d9e4ca'];
-  sky.addColorStop(0,stops[0]);sky.addColorStop(.64,stops[1]);sky.addColorStop(1,stops[2]);
-  ctx.fillStyle=sky;ctx.fillRect(0,0,width,height);
-  if(!rainy&&!snowy){
-    const sx=width*.77,sy=height*.18,r=Math.min(height,width)*.068;
-    const glow=ctx.createRadialGradient(sx,sy,r*.55,sx,sy,r*3.4);
-    glow.addColorStop(0,'#fff6d9b5');glow.addColorStop(1,'#fff6d900');
-    ctx.fillStyle=glow;ctx.fillRect(sx-r*3.4,sy-r*3.4,r*6.8,r*6.8);
-    ctx.fillStyle='#fff5d8';ctx.beginPath();ctx.arc(sx,sy,r,0,2*Math.PI);ctx.fill();
-  }
-  function ridge(fraction,tone,amplitude,offset){
-    ctx.fillStyle=tone;ctx.beginPath();ctx.moveTo(0,height);
-    for(let i=0;i<=32;i++){
-      const x=i/32,y=fraction+amplitude*(Math.sin(i*.54+offset)+.5*Math.cos(i*.96+offset));
-      ctx.lineTo(width*x,height*y);
-    }
-    ctx.lineTo(width,height);ctx.closePath();ctx.fill();
-  }
-  ridge(.48,snowy?'#c2d0cf':rainy?'#acbeba':'#bfd3bf',.038,1.4);
-  ridge(.53,snowy?'#cdd9d2':rainy?'#b4c3bc':'#cbdcc2',.026,3.5);
-  if(terrace){
-    ctx.fillStyle=snowy?'#b1c1c1':rainy?'#a0b2ae':'#b3c7ba';
-    for(let i=0;i<27;i++){
-      const bx=(i-.5)/26*width,by=(.46+.055*Math.sin(i*5.34))*height,bw=width/30;
-      ctx.fillRect(bx,by,bw,height*.56-by);
-      if(i%5===0)ctx.fillRect(bx+bw*.42,by-height*.027,bw*.1,height*.03);
-    }
-  }
-  const projected=[],hitAreas=[];
-  let windowPath=null;
-  let owner=null,layer=2,originX=0,originZ=0,rotation=0;
-  function face(vertices,color){
-    const c=Math.cos(rotation),s=Math.sin(rotation);
-    const p=vertices.map(([x,y,z])=>project([originX+x*c-z*s,y,originZ+x*s+z*c]));
-    projected.push({p,color,owner,layer,depth:p.reduce((sum,v)=>sum+v[2],0)/p.length});
-  }
+  return {ground,project,scale,edge};
+}
+function studioPrimitives(face){
   function ring(x,y,z,rx,rz,n=10,offset=0){
     return Array.from({length:n},(_,i)=>{
       const a=2*Math.PI*i/n+offset;
@@ -92,6 +50,11 @@ function paintStudioScene(canvas,{scene='campus',weather='sunny',zone='path',ite
   function pillar(x,y,z,rx,rz,h,colors,n=10,top=1){
     loft(ring(x,y,z,rx,rz,n),ring(x,y+h,z,rx*top,rz*top,n),colors);
   }
+  return {ring,loft,rectangle,box,pillar};
+}
+function studioPropFaces(kind,snowy){
+  const faces=[],face=(vertices,color)=>faces.push({vertices,color});
+  const {ring,loft,box,pillar}=studioPrimitives(face);
   const wood=['#9a7052','#ac8463','#b99068','#d2a97d'];
   const darkWood=['#74553f','#876348','#856548','#a77c54'];
   const metal=['#4d6960','#658176','#5d756b','#879b86'];
@@ -135,6 +98,52 @@ function paintStudioScene(canvas,{scene='campus',weather='sunny',zone='path',ite
       }
     }
   }
+  prop(kind);return faces;
+}
+function buildStudioBackdrop(canvas,view,projection,ratio){
+  const {scene,weather,zone,angle,extent}=view,width=canvas.width/ratio,height=canvas.height/ratio;
+  const {project,edge}=projection,ctx=canvas.getContext('2d');
+  const inside=studioIndoor(zone),terrace=scene==='terrace',court=scene==='courtyard';
+  const rainy=weather==='rain',snowy=weather==='snow';
+  ctx.setTransform(ratio,0,0,ratio,0,0);
+  const sky=ctx.createLinearGradient(0,0,0,height);
+  const stops=snowy?['#afc0c9','#e7ede8','#d5ded8']:rainy?['#899eaa','#cfdbd6','#b9cabe']:
+    terrace?['#a8d1ce','#f8e7bf','#e1e0c4']:court?['#c4d8c7','#f6ebce','#e2dfc4']:['#b4d8d3','#f5edcd','#d9e4ca'];
+  sky.addColorStop(0,stops[0]);sky.addColorStop(.64,stops[1]);sky.addColorStop(1,stops[2]);
+  ctx.fillStyle=sky;ctx.fillRect(0,0,width,height);
+  if(!rainy&&!snowy){
+    const sx=width*.77,sy=height*.18,r=Math.min(height,width)*.068;
+    const glow=ctx.createRadialGradient(sx,sy,r*.55,sx,sy,r*3.4);
+    glow.addColorStop(0,'#fff6d9b5');glow.addColorStop(1,'#fff6d900');
+    ctx.fillStyle=glow;ctx.fillRect(sx-r*3.4,sy-r*3.4,r*6.8,r*6.8);
+    ctx.fillStyle='#fff5d8';ctx.beginPath();ctx.arc(sx,sy,r,0,2*Math.PI);ctx.fill();
+  }
+  function ridge(fraction,tone,amplitude,offset){
+    ctx.fillStyle=tone;ctx.beginPath();ctx.moveTo(0,height);
+    for(let i=0;i<=32;i++){
+      const x=i/32,y=fraction+amplitude*(Math.sin(i*.54+offset)+.5*Math.cos(i*.96+offset));
+      ctx.lineTo(width*x,height*y);
+    }
+    ctx.lineTo(width,height);ctx.closePath();ctx.fill();
+  }
+  ridge(.48,snowy?'#c2d0cf':rainy?'#acbeba':'#bfd3bf',.038,1.4);
+  ridge(.53,snowy?'#cdd9d2':rainy?'#b4c3bc':'#cbdcc2',.026,3.5);
+  if(terrace){
+    ctx.fillStyle=snowy?'#b1c1c1':rainy?'#a0b2ae':'#b3c7ba';
+    for(let i=0;i<27;i++){
+      const bx=(i-.5)/26*width,by=(.46+.055*Math.sin(i*5.34))*height,bw=width/30;
+      ctx.fillRect(bx,by,bw,height*.56-by);
+      if(i%5===0)ctx.fillRect(bx+bw*.42,by-height*.027,bw*.1,height*.03);
+    }
+  }
+  const projected=[];
+  let layer=0;
+  function face(vertices,color){
+    const p=vertices.map(project);
+    const drawLayer=layer===2&&vertices.every(v=>v[1]<-.04)?-1:layer;
+    projected.push({p,color,layer:drawLayer,depth:p.reduce((sum,v)=>sum+v[2],0)/p.length});
+  }
+  const {ring,box,pillar,rectangle}=studioPrimitives(face);
   const floor=inside?['#cba47f','#af8968','#c39872',zone==='shelf'?'#cda77d':zone==='bench'?'#c2a07b':'#dfc5a1']:
     terrace?['#b1a69a','#bcae9b','#a29586',snowy?'#e4e7dd':'#ddc7ae']:
     court?['#a59888','#b3ab9a','#aaa18b',snowy?'#e3e8dd':'#c4c5ab']:
@@ -154,88 +163,12 @@ function paintStudioScene(canvas,{scene='campus',weather='sunny',zone='path',ite
   }
   layer=2;
   // Landmarks stay in world space as the visitor turns the camera.
-  const rear=-extent-.35;
-  if(inside){
-    const winW=Math.min(3.6,extent*1.45),frameH=2.2,glaze=rainy?'#95b4ba':snowy?'#cbdadd':'#b4d5cd';
-    const frame=zone==='bench'?darkWood:wood;
-    for(const x of [-winW/2,0,winW/2])box(x,.02,rear,.092,frameH,.09,frame);
-    for(const y of [.11,1.13,frameH])box(0,y,rear,winW+.11,.09,.09,frame);
-    const back=rear-.065;
-    windowPath=new Path2D();
-    [[-winW/2,.10,back],[winW/2,.10,back],[winW/2,frameH,back],[-winW/2,frameH,back]].map(project).forEach(([x,y],i)=>{
-      if(i)windowPath.lineTo(x,y);else windowPath.moveTo(x,y);
-    });
-    windowPath.closePath();
-    for(const x of [-1,1])face([[x*.06,.16,back],[x*(winW*.5-.05),.16,back],[x*(winW*.5-.05),frameH-.01,back],[x*.06,frameH-.01,back]],glaze+'bb');
-    box(0,.03,rear,winW+.32,.11,.42,wood);
-    if(zone==='shelf'||zone==='bench'){
-      for(let i=0;i<4;i++)box(-extent+.35+i*.14,.015,rear,.12,.43+.09*(i%3),.32,[metal,brick,wood,roof][i]);
-    }
-  }else if(terrace){
-    box(0,.01,rear,edge*2,.24,.24,brick);
-    for(let i=0;i<=8;i++)box(-extent+extent*i/4,.23,rear,.065,.68,.07,metal);
-    for(const y of [.51,.87])box(0,y,rear,edge*2,.06,.065,metal);
-  }else if(court){
-    const gap=Math.min(1,extent*.35),wing=edge-gap;
-    for(const sign of [-1,1]){
-      const x=sign*(gap+wing*.5);
-      box(x,.01,rear,wing,.86,.19,['#c4bea9','#d2cbb5','#dcd4bf','#e3dec9']);
-      box(x,.87,rear,wing+.05,.12,.32,roof);
-      box(sign*gap,.01,rear,.16,1.62,.21,lacquer);
-    }
-    loft(rectangle(0,1.58,rear,2*gap+.65,.49),rectangle(0,1.86,rear,2*gap+.20,.12),roof);
-  }else{
-    for(let i=0;i<=8;i++)box(-extent+extent*i/4,.015,rear,.09,.56,.095,wood);
-    for(const y of [.22,.43])box(0,y,rear,edge*2,.07,.085,wood);
-    if(zone==='pond'){
-      layer=1;face(ring(0,.015,rear,Math.min(2,extent*.58),.19,14),'#76a99d');layer=2;
-    }
-  }
-  for(const item of items){
-    originX=item.x;originZ=item.z;rotation=Number.isFinite(item.rotation)?item.rotation:0;
-    if(!Number.isFinite(originX)||!Number.isFinite(originZ))continue;
-    const id=item.uid??item.id;
-    const radius=studioFootprint(item,zone);
-    owner=null;layer=1;
-    face(ring(.06,.012,.07,radius*.96,radius*.67,16),'#4059402f');
-    if(id!=null&&id===selected){
-      const outer=ring(0,.016,0,radius+.12,radius+.12,36),inner=ring(0,.016,0,radius+.045,radius+.045,36);
-      for(let i=0;i<36;i++){const j=(i+1)%36;face([outer[i],outer[j],inner[j],inner[i]],'#466b54')}
-    }
-    layer=2;owner=id;
-    if(Object.hasOwn(studioPropRadius,item.kind))prop(item.kind);
-    else for(const mesh of studioPlantAsset(item,zone).faces)face(mesh.vertices,mesh.color);
-  }
+  const habitat=drawHabitat({zone,scene,weather,extent,angle,face,box,pillar,ring,rectangle,project,setLayer:n=>{layer=n}});
   projected.sort((a,b)=>a.layer-b.layer||a.depth-b.depth);
   ctx.lineJoin='round';ctx.lineWidth=.32;
   for(const f of projected){
-    const path=new Path2D();f.p.forEach(([x,y],i)=>i?path.lineTo(x,y):path.moveTo(x,y));path.closePath();
-    ctx.fillStyle=ctx.strokeStyle=f.color;ctx.fill(path);ctx.stroke(path);
-    if(f.owner!=null)hitAreas.push({path,id:f.owner});
+    ctx.beginPath();f.p.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y));ctx.closePath();
+    ctx.fillStyle=ctx.strokeStyle=f.color;ctx.fill();ctx.stroke();
   }
-  if(rainy||snowy){
-    const cutoff=inside?.36:1,count=snowy?82:54;
-    ctx.lineWidth=1;ctx.strokeStyle='#e0eeee99';ctx.fillStyle='#fffdf0d9';
-    for(let i=0;i<count;i++){
-      const x=((i*103.791)%101)/101*width,y=((i*69.917)%73)/73*height*cutoff;
-      ctx.beginPath();
-      if(snowy){ctx.arc(x,y,1.1+(i%3)*.52,0,2*Math.PI);ctx.fill()}
-      else{ctx.moveTo(x,y);ctx.lineTo(x-3.6,y+9+(i%4)*2);ctx.stroke()}
-    }
-  }
-  function hit(px,py){
-    ctx.save();ctx.resetTransform();
-    let id=null;
-    for(let i=hitAreas.length-1;i>=0;i--){
-      if(ctx.isPointInPath(hitAreas[i].path,px,py)){id=hitAreas[i].id;break}
-    }
-    ctx.restore();return id;
-  }
-  function windowHit(px,py){
-    if(!windowPath)return false;
-    ctx.save();ctx.resetTransform();
-    const inWindow=ctx.isPointInPath(windowPath,px,py);
-    ctx.restore();return inWindow;
-  }
-  return {ground,hit,windowHit};
+  return habitat;
 }

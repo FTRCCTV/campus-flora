@@ -95,7 +95,7 @@ function route(){
   $('backGarden').hidden=!visiting;$('add').hidden=visiting;$('trial').hidden=visiting;$('friends').hidden=visiting;
   try{collection=visiting?visitingGarden.plants:readGarden().map(r=>{const model=cachedModel(r.latin)||r.model;return {...r,model,form:plantProfile({...r,model}).form}})}catch{collection=[];toast('浏览器暂时无法读取观察记录。')}
   illustrated=!visiting&&!collection.length&&!readDesign().decorations.length;if(!visiting)$('qty').textContent=collection.length;
-  if(!garden){home();return}renderStudio();
+  if(!garden){home();return}renderStudio();schedulePaletteUpgrade();
   $('records').replaceChildren(...collection.map(r=>thumbButton(r,()=>visiting?sharedDetail(r):detail(r),placementName(r)+' · '+sizes[r.size])));
   if(visiting&&!collection.length)$('records').textContent='这位花友还没有种下植物。';
   if(illustrated)$('records').innerHTML='<div class="empty"><h2>这里会留下你的观察记录</h2><p>拍下植物，或从图鉴中挑一株试种。</p></div>';
@@ -123,6 +123,39 @@ function fillSelect(id,values,selected,placeholder){
   for(const [value,label] of Object.entries(values))el.add(new Option(label,value));
   el.value=selected||'';
 }
+// Upgrade original observations with their own photo colours, once per photo.
+// Wait until interaction is idle and save all matched records in one garden write.
+let paletteUpgradeRunning=false,paletteUpgradeTimer=0;
+function schedulePaletteUpgrade(){
+  if(visitingGarden||location.hash!=='#garden'||paletteUpgradeRunning||paletteUpgradeTimer||
+     !collection.some(p=>!p.demo&&!p.palette&&p.photo))return;
+  paletteUpgradeTimer=setTimeout(async()=>{
+    paletteUpgradeTimer=0;
+    if(visitingGarden||location.hash!=='#garden'||document.hidden)return;
+    if(studio.drag||studio.mode!=='view'||studioMoveSave||saveBusy||modal.open)return;
+    const owner=gardenAccount.user?.id||null;
+    const sameOwner=()=>!visitingGarden&&(gardenAccount.user?.id||null)===owner;
+    const samples=collection.filter(p=>!p.demo&&!p.palette&&p.photo);
+    if(!samples.length)return;
+    paletteUpgradeRunning=true;
+    try{
+      const colors=new Map();
+      for(const p of samples){
+        if(!sameOwner()||studio.drag||document.hidden||location.hash!=='#garden')break;
+        const palette=await paletteFromPhoto(p.photo,p.form).catch(()=>({}));
+        colors.set(p.uid,{photo:p.photo,palette});
+        await new Promise(resolve=>setTimeout(resolve,0));
+      }
+      if(colors.size&&sameOwner()&&!studio.drag&&!studioMoveSave&&!saveBusy){
+        await writeGarden(list=>{
+          for(const p of list){const sampled=colors.get(p.uid);if(sampled?.photo===p.photo&&!p.palette)p.palette=sampled.palette}
+        });
+        if(sameOwner())route();
+      }
+    }catch{/* A later garden visit can retry interrupted backfills. */}
+    finally{paletteUpgradeRunning=false}
+  },800);
+}
 function plantEditor(options,photo,demo,context={}){
   const prev=context.previous,editing=!!context.editUid,replacing=!!context.replaceUid;
   show('<div class="body"><div class="eyebrow">PLANTING DESK</div><h2>'+(editing?'调整植株':replacing?'确认替换':'种植工作台')+'</h2><div class="pot-choice"><canvas id="previewPlant"></canvas><div><label>植物名称<select id="species"></select></label><i id="taxonomy"></i></div></div><label>展示大小<select id="size"></select></label><label>种植区域<select id="bed"></select></label><label>发现地点（选填）<input id="place" maxlength="60"></label><p id="actionNote"></p><button class="primary" id="save">确定</button><p id="feedback" class="error" role="status"></p></div>');
@@ -132,10 +165,17 @@ function plantEditor(options,photo,demo,context={}){
   $('place').value=editing?prev.location||'':'';
   if(!demo){const img=document.createElement('img');img.src=photo;img.alt='本次观察的原始照片';img.className='observation-photo';body.querySelector('.pot-choice').before(img)}
   const originalUid=context.editUid||context.replaceUid;
+  let palette=editing?prev.palette:undefined;
+  const swatches=new Map();
+  function colorsFor(form){
+    if(demo||editing&&prev.palette)return Promise.resolve(editing?prev.palette:undefined);
+    if(!swatches.has(form))swatches.set(form,paletteFromPhoto(photo,form).catch(()=>({})));
+    return swatches.get(form);
+  }
   function updatePreview(){
     const p=options[Number($('species').value)];$('taxonomy').textContent=p.latin;
     const c=$('previewPlant');
-    if($('size').value){paintPot(c,{...p,model:cachedModel(p.latin)||p.model,size:$('size').value})}
+    if($('size').value){paintPot(c,{...p,palette,model:cachedModel(p.latin)||p.model,size:$('size').value})}
     else{c.width=180;c.height=200;const g=c.getContext('2d');g.fillStyle='#52674e';g.font='16px sans-serif';g.textAlign='center';g.fillText('选好体型后预览',90,105)}
   }
   const speciesPicker=$('species');
@@ -143,6 +183,9 @@ function plantEditor(options,photo,demo,context={}){
   function selectSpecies(){
     clearTimeout(previewTimer);updatePreview();
     const selected=options[Number(speciesPicker.value)];
+    colorsFor(plantProfile({...selected,model:cachedModel(selected.latin)||selected.model}).form).then(colors=>{
+      if(speciesPicker.isConnected&&selected===options[Number(speciesPicker.value)]){palette=colors;updatePreview()}
+    });
     if(demo||fileDemo||cachedModel(selected.latin))return;
     previewTimer=setTimeout(async()=>{
       if(!speciesPicker.isConnected||!modal.open)return;
@@ -159,10 +202,12 @@ function plantEditor(options,photo,demo,context={}){
     if(!size||!selected){$('feedback').textContent='请选择展示大小和区域。';return}
     const plantedId=editing?originalUid:crypto.randomUUID(),locationText=$('place').value.trim(),button=$('save');button.disabled=true;
     try{
+      const photoPalette=await colorsFor(form);
       await writeGarden((list,design)=>{
         const index=originalUid?list.findIndex(x=>x.uid===originalUid):-1;
         if(originalUid&&index<0)throw Error('原记录已变更，请重新选择。');
         const data={form,size,zone:selected,location:locationText};
+        if(photoPalette)data.palette=photoPalette;
         const previous=index>=0?GardenLayout.located(list[index]):null;
         Object.assign(data,GardenLayout.place(data,list.filter(r=>r.uid!==originalUid).concat(design.decorations),previous?.zone===selected?previous:null));
         if(editing){Object.assign(list[index],data);return}

@@ -11,6 +11,7 @@ function checkGarden(items){
     for(const field of ['location','family','note']){
       if(p[field]!=null&&(typeof p[field]!=='string'||p[field].length>2000))return false;
     }
+    if(p.palette!=null&&(typeof p.palette!=='object'||Array.isArray(p.palette)||Object.entries(p.palette).some(([k,v])=>!['leaf','bloom'].includes(k)||typeof v!=='string'||!/^#[0-9a-f]{6}$/i.test(v))))return false;
     if(p.model){
       const m=p.model;
       if(!['tree','shrub','flower','grass','rosette','herb'].includes(m.form)||
