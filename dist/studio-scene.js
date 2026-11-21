@@ -4,7 +4,7 @@ const studioPlantMeshes=new Map();
 function studioIndoor(zone){return ['sill','bench','shelf'].includes(zone)}
 function studioPlantAsset(item,zone){
   const indoor=studioIndoor(zone);
-  const key=JSON.stringify([indoor,item.latin,item.family,item.size,item.form,item.model,item.palette]);
+  const key=JSON.stringify([indoor,item.latin,item.family,item.size,item.form,item.model,item.palette,item.potStyle]);
   if(studioPlantMeshes.has(key))return studioPlantMeshes.get(key);
   const faces=specimenMesh(item,indoor);
   let radius=0;
@@ -15,7 +15,7 @@ function studioPlantAsset(item,zone){
   return asset;
 }
 function studioFootprint(item,zone){
-  return Object.hasOwn(studioPropRadius,item.kind)?studioPropRadius[item.kind]:studioPlantAsset(item,zone||item.zone).radius;
+  return Object.hasOwn(studioPropRadius,item.kind)?GardenLayout.radius(item):studioPlantAsset(item,zone||item.zone).radius;
 }
 
 function studioProjection(width,height,angle,zoom,extent,pitch=.53,panX=0,panY=0){
@@ -102,18 +102,57 @@ function studioPropFaces(kind,snowy){
   else studioSetpiece(kind,{face,...studioPrimitives(face)},snowy);
   return faces;
 }
+// Fixed coordinates prevent the stars from changing pattern while the view rotates.
+const studioStars=(()=>{
+  let state=18713;
+  const random=()=>{state=(Math.imul(1664525,state)+1013904223)>>>0;return state/4294967296};
+  return Array.from({length:210},()=>({x:random(),y:random(),magnitude:random(),warm:random()<.18}));
+})();
+function drawStudioStars(ctx,width,height,angle,weather,moonVisible){
+  const unit=Math.min(width,height),clear=weather==='sunny',count=clear?210:weather==='snow'?56:19;
+  const wrap=x=>x-Math.floor(x),shift=(angle-.57)/(Math.PI*2);
+  const moonX=wrap(.76-shift)*width,moonY=height*.174,r=unit*.034;
+  if(moonVisible){
+    const halo=ctx.createRadialGradient(moonX,moonY,0,moonX,moonY,r*4.8);
+    halo.addColorStop(0,clear?'#c9d8ec35':'#ccd5e12e');halo.addColorStop(1,'#c9d8ec00');
+    ctx.fillStyle=halo;ctx.fillRect(moonX-r*5,moonY-r*5,r*10,r*10);
+  }
+  ctx.save();
+  for(let i=0;i<count;i++){
+    const s=studioStars[i],x=wrap(s.x-shift)*width,y=s.y*.48*height,bright=s.magnitude**4;
+    if(moonVisible&&Math.hypot(x-moonX,y-moonY)<r*1.1)continue;
+    const size=unit*(.00065+.00155*bright);
+    ctx.fillStyle=s.warm?'#ffe5bb':'#d4e6ff';
+    ctx.globalAlpha=(clear?.83:.44)*(.4+.6*bright)*(1-.45*s.y);
+    ctx.beginPath();ctx.arc(x,y,size,0,Math.PI*2);ctx.fill();
+    if(clear&&s.magnitude>.96){
+      ctx.globalAlpha=.33;ctx.fillRect(x-size*.26,y-size*2.4,size*.52,size*4.8);
+      ctx.fillRect(x-size*2.1,y-size*.23,size*4.2,size*.46);
+    }
+  }
+  // The dim side remains visible in earthshine beneath the illuminated crescent.
+  if(!moonVisible){ctx.restore();return}
+  ctx.globalAlpha=clear?.92:.55;
+  ctx.fillStyle='#64748a';ctx.beginPath();ctx.arc(moonX,moonY,r,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#f2e4c6';ctx.beginPath();ctx.arc(moonX,moonY,r,-Math.PI/2,Math.PI/2);
+  ctx.bezierCurveTo(moonX+r*.77,moonY+r*.61,moonX+r*.77,moonY-r*.61,moonX,moonY-r);
+  ctx.closePath();ctx.fill();
+  ctx.restore();
+}
 function buildStudioBackdrop(canvas,view,projection,ratio){
   const {scene,weather,zone,angle,extent}=view,width=canvas.width/ratio,height=canvas.height/ratio;
   const {project,edge}=projection,ctx=canvas.getContext('2d');
   const inside=studioIndoor(zone),terrace=scene==='terrace',court=scene==='courtyard';
-  const rainy=weather==='rain',snowy=weather==='snow';
+  const rainy=weather==='rain',snowy=weather==='snow',night=scene==='starlight';
   ctx.setTransform(ratio,0,0,ratio,0,0);
   const sky=ctx.createLinearGradient(0,0,0,height);
-  const stops=snowy?['#afc0c9','#e7ede8','#d5ded8']:rainy?['#899eaa','#cfdbd6','#b9cabe']:
+  const stops=night?(snowy?['#28394c','#657488','#586676']:rainy?['#1d2b3b','#465566','#394755']:['#101a35','#485777','#5e687a']):
+    snowy?['#afc0c9','#e7ede8','#d5ded8']:rainy?['#899eaa','#cfdbd6','#b9cabe']:
     terrace?['#a8d1ce','#f8e7bf','#e1e0c4']:court?['#c4d8c7','#f6ebce','#e2dfc4']:['#b4d8d3','#f5edcd','#d9e4ca'];
   sky.addColorStop(0,stops[0]);sky.addColorStop(.64,stops[1]);sky.addColorStop(1,stops[2]);
   ctx.fillStyle=sky;ctx.fillRect(0,0,width,height);
-  if(!rainy&&!snowy){
+  if(night)drawStudioStars(ctx,width,height,angle,weather,!inside||Math.cos(angle)<=-.1);
+  else if(!rainy&&!snowy){
     const sx=width*.77,sy=height*.18,r=Math.min(height,width)*.068;
     const glow=ctx.createRadialGradient(sx,sy,r*.55,sx,sy,r*3.4);
     glow.addColorStop(0,'#fff6d9b5');glow.addColorStop(1,'#fff6d900');
@@ -128,8 +167,8 @@ function buildStudioBackdrop(canvas,view,projection,ratio){
     }
     ctx.lineTo(width,height);ctx.closePath();ctx.fill();
   }
-  ridge(.48,snowy?'#c2d0cf':rainy?'#acbeba':'#bfd3bf',.038,1.4);
-  ridge(.53,snowy?'#cdd9d2':rainy?'#b4c3bc':'#cbdcc2',.026,3.5);
+  ridge(.48,night?'#3e5264':snowy?'#c2d0cf':rainy?'#acbeba':'#bfd3bf',.038,1.4);
+  ridge(.53,night?'#2b414f':snowy?'#cdd9d2':rainy?'#b4c3bc':'#cbdcc2',.026,3.5);
   if(terrace){
     ctx.fillStyle=snowy?'#b1c1c1':rainy?'#a0b2ae':'#b3c7ba';
     for(let i=0;i<27;i++){
@@ -140,10 +179,19 @@ function buildStudioBackdrop(canvas,view,projection,ratio){
   }
   const projected=[];
   let layer=0;
-  function face(vertices,color){
+  const moonlit=new Map();
+  function nightMaterial(color){
+    if(!moonlit.has(color)){
+      const rgb=[1,3,5].map(n=>parseInt(color.slice(n,n+2),16));
+      const gain=inside?[.67,.63,.64]:[.38,.48,.57],fill=inside?[10,11,18]:[8,15,25];
+      moonlit.set(color,'#'+rgb.map((v,i)=>Math.round(v*gain[i]+fill[i]).toString(16).padStart(2,'0')).join('')+color.slice(7));
+    }
+    return moonlit.get(color);
+  }
+  function face(vertices,color,emissive=false){
     const p=vertices.map(project);
     const drawLayer=layer===2&&vertices.every(v=>v[1]<-.04)?-1:layer;
-    projected.push({p,color,layer:drawLayer,depth:p.reduce((sum,v)=>sum+v[2],0)/p.length});
+    projected.push({p,color:night&&!emissive?nightMaterial(color):color,layer:drawLayer,depth:p.reduce((sum,v)=>sum+v[2],0)/p.length});
   }
   const {ring,box,pillar,rectangle}=studioPrimitives(face);
   const floor=inside?['#cba47f','#af8968','#c39872',zone==='shelf'?'#cda77d':zone==='bench'?'#c2a07b':'#dfc5a1']:

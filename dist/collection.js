@@ -51,6 +51,6 @@ async function writeGarden(update){
     if(!GardenLayout.valid(list,design))throw Error('物品重叠或位置无效。');
     localStorage.setItem(gardenKey,JSON.stringify({records:list,design}));
   };
-  if(navigator.locks)await navigator.locks.request(gardenKey,write);else write();
+  if(navigator.locks)await navigator.locks.request(gardenKey,write);else await write();
 }
 function placementName(r){return places[r.zone].name}

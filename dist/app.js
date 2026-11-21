@@ -6,12 +6,12 @@ document.querySelectorAll('[data-icon]').forEach(el=>el.innerHTML=icon(el.datase
 let apiKey='', requestController, collection=[], illustrated=false;
 const hosted='https://cau-campus-flora-notebook.bubblybox131.chatgpt.site/';
 const inFlight=new Map(),modelCache=new Map(),modelErrors=new Map();
-const profileKey=latin=>'cau.flora.profile.ds.v2.'+latin.trim().toLowerCase();
+const profileKey=latin=>'cau.flora.profile.ds.v3.'+latin.trim().toLowerCase();
 function cachedModel(latin){
   const k=profileKey(latin);
-  const saved=gardenAccount.records.find(r=>r.model&&profileKey(r.latin)===k);
-  if(saved)return saved.model;
   if(modelCache.has(k))return modelCache.get(k);
+  const saved=gardenAccount.records.find(r=>r.model?.profileVersion===3&&profileKey(r.latin)===k);
+  if(saved)return saved.model;
   try{return JSON.parse(localStorage.getItem(k))}catch{return null}
 }
 async function refinePlant(r){
@@ -22,7 +22,7 @@ async function refinePlant(r){
   if(inFlight.has(k))return inFlight.get(k);
   const job=(async()=>{
     try{
-      const response=await fetch('/api/model',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({latin:r.latin}),signal:AbortSignal.timeout(24000)});
+      const response=await fetch('/api/model',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({latin:r.latin}),signal:AbortSignal.timeout(90000)});
       if(!response.ok){
         const data=await response.json().catch(()=>({}));
         const messages={billing:'DeepSeek 账户余额不足。',credentials:'DeepSeek 密钥验证失败。',rate_limit:'DeepSeek 请求频繁，请稍后再试。'};
@@ -36,9 +36,9 @@ async function refinePlant(r){
         catch{toast('株形已缓存在本机，云端株形同步未完成。')}
       }
       return true;
-    }catch{return false}
+    }catch{modelErrors.set(k,'精细模型暂未完成，可在手记中重试。');return false}
   })();
-  inFlight.set(k,job);try{return await job}finally{inFlight.delete(k);route()}
+  inFlight.set(k,job);if(location.hash==='#garden')renderStudio();try{return await job}finally{inFlight.delete(k);route()}
 }
 let zone='sill', outdoorZone='path', indoorZone='sill',heroIndex=0;
 function esc(value){const el=document.createElement('span');el.textContent=String(value??'');return el.innerHTML}
@@ -102,7 +102,7 @@ function route(){
 }
 window.addEventListener('storage',e=>{if(e.key===gardenKey||e.key===null)route()});
 function detail(r){
-  show('<img class="detailArt" alt="观察记录"><div class="body"><div class="eyebrow">'+(r.gift?'花友分株':r.demo?'图鉴示例':'校园观察')+'</div><h2>'+esc(r.name)+'</h2><i>'+esc(r.latin)+'</i><p>'+esc(r.note||r.family||'')+'</p><div class="recinfo">'+esc(r.date)+' · '+esc(r.location||'未填写发现地点')+'</div><p>'+esc(placementName(r))+' · '+sizes[r.size]+' · '+habits[r.form]+'</p><div class="management"><button id="move">调整体型与位置</button><button id="replace">替换植物</button><button class="danger" id="remove">移除</button></div><p class="modelnote" id="modelStatus"></p></div>');
+  show('<img class="detailArt" alt="观察记录"><div class="body"><div class="eyebrow">'+(r.gift?'花友分株':r.demo?'图鉴示例':'校园观察')+'</div><h2>'+esc(r.name)+'</h2><i>'+esc(r.latin)+'</i><p>'+esc(r.family||'')+'</p><h3>植物小科普</h3><p id="detailFact">'+esc(plantFact(r))+'</p><div class="recinfo">'+esc(r.date)+' · '+esc(r.location||'未填写发现地点')+'</div><p>'+esc(placementName(r))+' · '+sizes[r.size]+' · '+habits[r.form]+'</p><div class="management"><button id="move">调整体型与位置</button><button id="replace">替换植物</button><button class="danger" id="remove">移除</button></div><p class="modelnote" id="modelStatus"></p></div>');
   body.querySelector('img').src=r.photo;
   $('move').onclick=()=>plantEditor([r],r.photo,r.demo,{editUid:r.uid,previous:r});
   $('replace').onclick=()=>library({replaceUid:r.uid,previous:r,zone:r.zone});
@@ -115,7 +115,7 @@ function detail(r){
   const status=$('modelStatus'),k=profileKey(r.latin);status.textContent=cachedModel(r.latin)?'已应用物种模型':modelErrors.get(k)||'当前显示基础模型';
   if(!cachedModel(r.latin)&&location.protocol!=='file:'){
     const b=document.createElement('button');b.className='light';b.textContent='细化物种特征';status.after(b);
-    b.onclick=async()=>{b.disabled=true;status.textContent='正在细化植物特征…';const ok=await refinePlant(r);status.textContent=ok?'已应用物种模型':modelErrors.get(k)||'暂时无法生成，请稍后重试。';b.hidden=!!ok;b.disabled=false};
+    b.onclick=async()=>{b.disabled=true;status.classList.add('modelPending');status.textContent='正在细化叶序和花序…';const ok=await refinePlant(r);status.classList.remove('modelPending');if(ok&&status.isConnected)$('detailFact').textContent=plantFact(r);status.textContent=ok?'已应用物种模型':modelErrors.get(k)||'暂时无法生成，请稍后重试。';b.hidden=!!ok;b.disabled=false};
   }
 }
 function fillSelect(id,values,selected,placeholder){
@@ -156,9 +156,16 @@ function schedulePaletteUpgrade(){
     finally{paletteUpgradeRunning=false}
   },800);
 }
+function plantFact(plant){
+  const model=cachedModel(plant.latin)||plant.model;
+  const entry=samples.find(s=>s.latin===plant.latin||s.latin.startsWith(plant.latin+' '));
+  if(model?.fact)return model.fact;
+  if(entry?.note)return entry.note;
+  return (plant.family?'这个候选物种属于 '+plant.family+'。':'候选学名为 '+plant.latin+'。')+'可以对照照片观察叶片在茎上是成对生长，还是左右交错。';
+}
 function plantEditor(options,photo,demo,context={}){
   const prev=context.previous,editing=!!context.editUid,replacing=!!context.replaceUid;
-  show('<div class="body"><div class="eyebrow">PLANTING DESK</div><h2>'+(editing?'调整植株':replacing?'确认替换':'种植工作台')+'</h2><div class="pot-choice"><canvas id="previewPlant"></canvas><div><label>植物名称<select id="species"></select></label><i id="taxonomy"></i></div></div><label>展示大小<select id="size"></select></label><label>种植区域<select id="bed"></select></label><label>发现地点（选填）<input id="place" maxlength="60"></label><p id="actionNote"></p><button class="primary" id="save">确定</button><p id="feedback" class="error" role="status"></p></div>');
+  show('<div class="body"><div class="eyebrow">PLANTING DESK</div><h2>'+(editing?'调整植株':replacing?'确认替换':'种植工作台')+'</h2><div class="pot-choice"><canvas id="previewPlant"></canvas><div><label>植物名称<select id="species"></select></label><i id="taxonomy"></i></div></div><section class="plantFact"><strong>植物小科普</strong><p id="speciesFact"></p><p id="profileProgress" role="status" hidden></p></section><label>展示大小<select id="size"></select></label><label>种植区域<select id="bed"></select></label><label>发现地点（选填）<input id="place" maxlength="60"></label><p id="actionNote"></p><button class="primary" id="save">确定</button><p id="feedback" class="error" role="status"></p></div>');
   options.forEach((r,i)=>$('species').add(new Option(r.name+(Number.isFinite(r.score)?' · '+(100*r.score).toFixed(1)+'%':''),i)));
   fillSelect('size',sizes,prev?.size,'请选择体型');
   fillSelect('bed',Object.fromEntries(Object.entries(places).map(([k,v])=>[k,v.name])),context.zone||prev?.zone||zone,'请选择区域');
@@ -186,11 +193,19 @@ function plantEditor(options,photo,demo,context={}){
     colorsFor(plantProfile({...selected,model:cachedModel(selected.latin)||selected.model}).form).then(colors=>{
       if(speciesPicker.isConnected&&selected===options[Number(speciesPicker.value)]){palette=colors;updatePreview()}
     });
+    const progress=$('profileProgress'),fact=$('speciesFact');
+    fact.textContent=plantFact(selected);
+    progress.hidden=true;progress.classList.remove('modelPending');
     if(demo||fileDemo||cachedModel(selected.latin))return;
+    progress.hidden=false;progress.classList.add('modelPending');progress.textContent='正在细化叶形、叶序和花序…';
     previewTimer=setTimeout(async()=>{
       if(!speciesPicker.isConnected||!modal.open)return;
-      await refinePlant(selected);
-      if(speciesPicker.isConnected&&modal.open&&selected===options[Number(speciesPicker.value)])updatePreview();
+      const ready=await refinePlant(selected);
+      if(speciesPicker.isConnected&&modal.open&&selected===options[Number(speciesPicker.value)]){
+        progress.classList.remove('modelPending');progress.hidden=false;
+        progress.textContent=ready?'物种模型已就绪':modelErrors.get(profileKey(selected.latin))||'暂用基础株形，可在手记中重试。';
+        fact.textContent=plantFact(selected);updatePreview();
+      }
     },450);
   }
   selectSpecies();
@@ -251,7 +266,7 @@ async function identifyPhoto(item,context={}){
     }
     if(!response.ok)throw Error(data.error||'识别服务暂时不可用。');
     if(!data.results.length){preview(item.photo,'未找到匹配植物','<p>请靠近一朵花或一片完整的叶子重新拍摄。</p><button class="light" id="again">换张照片</button>');$('again').onclick=()=>guide(context);return}
-    const options=data.results.map(r=>{const known=plants.find(p=>p.latin.startsWith(r.latin+' ')||p.latin===r.latin);return {...r,name:known?.name||r.name,note:known?.note}});
+    const options=data.results.map(r=>{const known=samples.find(p=>p.latin.startsWith(r.latin+' ')||p.latin===r.latin);return {...r,name:known?.name||r.name,note:known?.note}});
     plantEditor(options,item.photo,false,context);
   }catch(e){if(controller.signal.aborted)return;preview(item.photo,'这次识别未完成','<p>'+esc(e.message)+'</p><button class="light" id="retry">重新识别</button>');$('retry').onclick=()=>identifyPhoto(item,context)}
 }

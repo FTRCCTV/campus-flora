@@ -9,6 +9,7 @@ function paintStudioWeather(canvas,frame,zone,weather,seconds){
     if(!frame.weatherPath){ctx.restore();return}
     ctx.clip(frame.weatherPath);
   }
+  if(weather==='sunny'&&frame.night){ctx.restore();return}
   if(weather==='sunny'){
     const y=indoor?h*.28:h*.15;
     for(let i=0;i<3;i++){

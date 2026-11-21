@@ -18,7 +18,7 @@ function drawStudioFrame(){
   if(!design)return;
   const items=studio.items.map(p=>drag?.point&&p.uid===drag.id?{...p,...drag.point}:visibleStudioItem(p));
   studio.picker=paintStudioScene(canvas,{zone,items,scene:design.scene,weather:design.weather,angle:studio.angle,pitch:studio.pitch,panX:studio.panX,panY:studio.panY,zoom:studio.zoom,extent:studio.extent,selected:studio.mode==='edit'?studio.selected:null});
-  updateStudioWeather();
+  studioClimate.last=-1;updateStudioWeather();
 }
 function scheduleStudio(){if(!studio.frame)studio.frame=requestAnimationFrame(()=>{studio.frame=0;drawStudioFrame()})}
 function renderStudio(){
@@ -29,13 +29,14 @@ function renderStudio(){
   }
   const edit=studio.mode==='edit',photo=studio.mode==='photo',design=readDesign();
   studio.design=design;studio.items=studioList(design);
-  studio.extent=Math.max(3.25,...studio.items.map(p=>Math.max(Math.abs(p.x),Math.abs(p.z))+GardenLayout.radius(p)+.45));
+  studio.extent=Math.max(edit?studio.extent:3.25,3.25,...studio.items.map(p=>Math.max(Math.abs(p.x),Math.abs(p.z))+GardenLayout.radius(p)+.45));
   if(!studio.items.some(p=>p.uid===studio.selected))studio.selected=null;
   for(const b of $('zones').children)b.setAttribute('aria-pressed',b.dataset.zone===zone);
   $('sceneLabel').textContent=(illustrated&&!edit?'示例 · ':'')+places[zone].name;
   $('returnRoom').textContent=places[zone].room?'推窗去室外':'返回室内';
   $('layoutMode').hidden=!!visitingGarden;$('layoutMode').disabled=!['guest','member'].includes(gardenAccount.mode);
   $('layoutMode').textContent=edit?'完成布置':'布置花园';$('layoutMode').setAttribute('aria-pressed',edit);
+  $('gardenModelLoad').hidden=!studio.items.some(p=>p.latin&&inFlight.has(profileKey(p.latin)));
   $('layoutTools').hidden=!edit;$('cameraControls').hidden=!photo;
   $('stage').classList.toggle('photoStudio',photo);
   $('sceneChoice').value=design.scene;$('weatherChoice').value=design.weather;
@@ -44,9 +45,15 @@ function renderStudio(){
   if(edit){
     const picker=$('pickObject');picker.replaceChildren(new Option('点选或拖动场景中的物品',''));
     for(const p of studio.items)picker.add(new Option(p.kind?GardenLayout.props[p.kind]:p.name,p.uid));
-    picker.value=studio.selected||'';$('rotateProp').hidden=$('removeProp').hidden=!studio.items.some(p=>p.uid===studio.selected&&p.kind);
+    picker.value=studio.selected||'';studioSelectionTools();
   }
   scheduleStudio();
+}
+function studioSelectionTools(){
+  const item=studio.items.find(p=>p.uid===studio.selected);
+  $('propSizeControl').hidden=$('rotateProp').hidden=$('removeProp').hidden=!item?.kind;
+  $('potControl').hidden=!item||!!item.kind||!studioIndoor(zone);
+  $('propScale').value=String(item?.scale??1);$('potStyle').value=item?.potStyle||'clay';
 }
 async function saveStudio(change,message){
   if(studio.busy||visitingGarden)return;
@@ -133,6 +140,19 @@ function initStudio(){
   $('cameraLevel').onclick=()=>{studio.pitch=0;scheduleStudio()};
   $('cameraAbove').onclick=()=>{studio.pitch=1.12;scheduleStudio()};
   $('cameraPan').onclick=()=>{studio.pan=!studio.pan;$('cameraPan').setAttribute('aria-pressed',String(studio.pan))};
+  $('potStyle').onchange=e=>{
+    const value=e.target.value,id=studio.selected;
+    void saveStudio(records=>{const p=records.find(p=>p.uid===id&&p.zone===zone);if(p)p.potStyle=value},'花盆材质已保存。');
+  };
+  $('propScale').onchange=e=>{
+    const value=Number(e.target.value),id=studio.selected;
+    void saveStudio((records,design)=>{
+      const p=design.decorations.find(p=>p.uid===id&&p.zone===zone);
+      if(!p)throw Error('请重新选择摆件。');
+      if(!GardenLayout.clear({...p,scale:value},records.concat(design.decorations)))throw Error('放大后会重叠，请先挪出空间。');
+      p.scale=value;
+    },'摆件比例已保存。');
+  };
   $('rotateProp').onclick=()=>saveStudio((_,design)=>{
     const p=design.decorations.find(item=>item.uid===studio.selected&&item.zone===zone);
     if(p)p.rotation=((p.rotation||0)+Math.PI/4)%(Math.PI*2);
@@ -153,22 +173,23 @@ function initStudio(){
     if(!studio.picker||studio.drag||e.button!==0||studio.busy)return;
     const [x,y]=local(e),id=studio.picker.hit(x,y),pt=studio.picker.ground(x,y);
     const stored=studio.items.find(p=>p.uid===id),item=stored&&visibleStudioItem(stored);
-    studio.drag={pid:e.pointerId,x,y,id,angle:studio.angle,pitch:studio.pitch,panX:studio.panX,panY:studio.panY,panning:studio.mode==='photo'&&(studio.pan||e.shiftKey),moved:false,origin:pt,item,scope:studioScope()};
+    studio.drag={pid:e.pointerId,x,y,id,angle:studio.angle,pitch:studio.pitch,panX:studio.panX,panY:studio.panY,panning:studio.mode==='photo'&&(studio.pan||e.shiftKey),moved:false,origin:pt,ground:studio.picker.ground,item,scope:studioScope()};
     canvas.setPointerCapture(e.pointerId);
-    if(studio.mode==='edit'&&id){studio.selected=id;$('pickObject').value=id;$('rotateProp').hidden=$('removeProp').hidden=!item?.kind;scheduleStudio()}
+    if(studio.mode==='edit'&&id){studio.selected=id;$('pickObject').value=id;studioSelectionTools();scheduleStudio()}
   };
   canvas.onpointermove=e=>{
     const d=studio.drag;if(!d||d.pid!==e.pointerId)return;
     const [x,y]=local(e);d.moved||=Math.hypot(x-d.x,y-d.y)>4;if(!d.moved)return;
     if(studio.mode==='edit'&&d.item){
-      const pt=studio.picker.ground(x,y);
-      d.point={x:d.item.x+pt.x-d.origin.x,z:d.item.z+pt.z-d.origin.z};
+      const pt=d.ground(x,y),limit=studio.extent-GardenLayout.radius(d.item);
+      const bounded=v=>Math.max(-limit,Math.min(limit,v));
+      d.point={x:bounded(d.item.x+pt.x-d.origin.x),z:bounded(d.item.z+pt.z-d.origin.z)};
     }else if(d.panning){
       studio.panX=Math.max(-1,Math.min(1,d.panX+(x-d.x)/canvas.clientWidth));
       studio.panY=Math.max(-1,Math.min(1,d.panY+(y-d.y)/canvas.clientHeight));
     }else{
-      studio.angle=d.angle+(x-d.x)*.009;
-      studio.pitch=clampStudioPitch(d.pitch+(y-d.y)*.006);
+      studio.angle=d.angle-(x-d.x)*.009;
+      studio.pitch=clampStudioPitch(d.pitch-(y-d.y)*.006);
     }
     scheduleStudio();
   };
@@ -199,7 +220,7 @@ function initStudio(){
     else{
       const [dx,dy]=deltas[e.key];
       if(studio.mode==='photo'&&studio.pan){studio.panX=Math.max(-1,Math.min(1,studio.panX+dx/4));studio.panY=Math.max(-1,Math.min(1,studio.panY+dy/4))}
-      else{studio.angle+=dx;studio.pitch=clampStudioPitch(studio.pitch-dy)}
+      else{studio.angle-=dx;studio.pitch=clampStudioPitch(studio.pitch-dy)}
       scheduleStudio();
     }
   };

@@ -54,6 +54,8 @@
 .photoStudio .scene-title,.photoStudio .scene-controls{display:none}
 .cameraControls{position:absolute;bottom:max(24px,env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);display:flex;flex-wrap:wrap;justify-content:center;width:max-content;max-width:calc(100% - 20px);gap:6px;white-space:nowrap}
 .cameraControls button[aria-pressed=true]{background:#305643;color:#fff}
+.plantFact{margin:.85rem 0;padding:.7rem 1rem;border-left:3px solid #859e72;background:#eff4e9;border-radius:0 9px 9px 0}.plantFact p{margin:.35rem 0}.gardenModelLoad{position:absolute;top:3.3rem;left:1rem;z-index:2;background:#f8faf0e8;border-radius:12px;padding:.4rem .7rem;font-size:.82rem}.photoStudio .gardenModelLoad{display:none}
+.modelPending::before,.gardenModelLoad::before{content:'';display:inline-block;width:.8em;height:.8em;margin-right:.5em;vertical-align:-.1em;border:2px solid #adc3a4;border-top-color:#35614b;border-radius:50%;animation:profileTurn .9s linear infinite}@keyframes profileTurn{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.modelPending::before,.gardenModelLoad::before{animation:none}}
 .cameraControls button{box-shadow:0 2px 14px #30403430}
 @media(max-width:600px){.studioActions{margin-left:0}.studioBar{gap:8px}.studioBar select{min-width:90px}}
 .studioStage #studioWeather{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1;transform:none;transition:none}

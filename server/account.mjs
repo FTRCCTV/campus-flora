@@ -17,6 +17,11 @@ function checkGarden(items){
       if(!['tree','shrub','flower','grass','rosette','herb'].includes(m.form)||
         ![m.leaf,m.bloom].every(c=>typeof c==='string'&&/^#[a-f0-9]{6}$/i.test(c))||
         ![m.height,m.spread].every(n=>Number.isFinite(n)&&n>=.6&&n<=1.4)||
+        (m.arrangement!=null&&!['alternate','opposite','whorled','basal'].includes(m.arrangement))||
+        (m.inflorescence!=null&&!['solitary','cluster','spike','none'].includes(m.inflorescence))||
+        (m.margin!=null&&!['smooth','toothed'].includes(m.margin))||
+        (m.leafAspect!=null&&(!Number.isFinite(m.leafAspect)||m.leafAspect<.65||m.leafAspect>1.5))||
+        (m.fact!=null&&(typeof m.fact!=='string'||m.fact.length>240))||
         !Number.isInteger(m.count)||m.count<3||m.count>14||
         (m.petals!=null&&(!Number.isInteger(m.petals)||m.petals<0||m.petals>24)))return false;
     }

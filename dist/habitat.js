@@ -1,7 +1,7 @@
 // Architectural scenery hugs the edge of the editable garden. The rear wall
 // and its glazing share the same projection as picking and the weather mask.
 function drawHabitat({zone,scene,weather,extent,angle,face,box,pillar,ring,rectangle,project,setLayer}){
-  const inside=['sill','bench','shelf'].includes(zone),snow=weather==='snow',wet=weather==='rain';
+  const inside=['sill','bench','shelf'].includes(zone),snow=weather==='snow',wet=weather==='rain',night=scene==='starlight';
   const edge=extent+.62,rear=-edge+.06;
   const oak=['#a47953','#ba9064','#a98258','#deb482'];
   const walnut=['#674b3c','#81624b','#88684e','#9e7b5a'];
@@ -118,14 +118,37 @@ function drawHabitat({zone,scene,weather,extent,angle,face,box,pillar,ring,recta
       const paneZ=back+.079,pane=wallQuad(-win,win,bottom,top,paneZ);
       windowPath=pathFor(pane);
       setLayer(3);
-      const glass=wet?'#b4cbd1':snow?'#d0dee1':'#b8dbd6';
-      const distant=wet?'#859c98':snow?'#acbfbc':'#95b5a3',near=wet?'#748d86':snow?'#bacabb':'#86a185';
+      const glass=night?(wet?'#344251':snow?'#4a5a70':'#273852'):wet?'#b4cbd1':snow?'#d0dee1':'#b8dbd6';
+      const distant=night?'#4a6071':wet?'#859c98':snow?'#acbfbc':'#95b5a3',near=night?'#374f57':wet?'#748d86':snow?'#bacabb':'#86a185';
       const skyline=[[-1,.41],[-.77,.45],[-.53,.33],[-.31,.43],[-.04,.40],[.24,.54],[.51,.45],[.77,.51],[1,.46]];
       const far=skyline.map(([u,v])=>[u*win,bottom+(top-bottom)*v,paneZ]);
       const hedge=skyline.map(([u,v],i)=>[u*win,bottom+(top-bottom)*(.12+v*.22+.035*(i%2)),paneZ]);
-      face([[-win,top,paneZ],[win,top,paneZ],...far.slice().reverse()],glass);
-      face([...far,...hedge.slice().reverse()],distant);
-      face([...hedge,[win,bottom,paneZ],[-win,bottom,paneZ]],near);
+      face([[-win,top,paneZ],[win,top,paneZ],...far.slice().reverse()],glass,night);
+      face([...far,...hedge.slice().reverse()],distant,night);
+      face([...hedge,[win,bottom,paneZ],[-win,bottom,paneZ]],near,night);
+      if(night){
+        setLayer(3.5);
+        const moonX=win*.59,moonY=top-.38,r=.108;
+        for(const s of studioStars.slice(0,wet?10:snow?21:46)){
+          const x=(s.x*1.95-.975)*win,y=bottom+(top-bottom)*(.56+s.y*.4),size=.005+s.magnitude**3*.018;
+          if(Math.hypot(x-moonX,y-moonY)<r*1.25)continue;
+          face([[x-size,y,paneZ],[x,y+size*1.2,paneZ],[x+size,y,paneZ],[x,y-size*1.2,paneZ]],s.warm?'#e8d5a8':'#b3cada',true);
+        }
+        const crescent=[];
+        for(let i=0;i<=14;i++){
+          const a=(i/14-.5)*Math.PI;
+          crescent.push([moonX+r*Math.cos(a),moonY+r*Math.sin(a),paneZ]);
+        }
+        for(let i=13;i>0;i--){
+          const a=(i/14-.5)*Math.PI;
+          crescent.push([moonX+r*.51*Math.cos(a),moonY+r*Math.sin(a),paneZ]);
+        }
+        face(crescent,wet?'#b3babd':'#f8e9c3',true);
+        for(const x of [-.85,-.74,-.48,.32,.42,.80]){
+          const y=bottom+.44+(1+Math.sin(x*13))*.044;
+          face(wallQuad(x*win-.018,x*win+.018,y,y+.025,paneZ),'#d2ac73',true);
+        }
+      }
       setLayer(4);
       const mull=.058,cy=bottom+(top-bottom)*.60;
       for(const x of [-win,-win/3,win/3,win])box(x-.008,bottom-.04,paneZ+.044,.07,top-bottom+.09,.09,oak);
@@ -150,6 +173,18 @@ function drawHabitat({zone,scene,weather,extent,angle,face,box,pillar,ring,recta
       }
       setLayer(6);
       shelfBooks(cupboardX-cw*.39,.85,back+.24,Math.min(5,Math.floor(cw/.16)));
+      if(night){
+        // An opal-glass reading lamp on the cupboard; the light source is distinct from the lamp stand.
+        const lampX=cupboardX+cw*.25,lampZ=back+.25;
+        pillar(lampX,.85,lampZ,.10,.10,.045,brass,10);
+        pillar(lampX,.895,lampZ,.030,.030,.23,brass,8);
+        const low=ring(lampX,1.118,lampZ,.135,.135,10),wide=ring(lampX,1.24,lampZ,.165,.165,10),rim=ring(lampX,1.32,lampZ,.118,.118,10);
+        for(let i=0;i<10;i++){
+          const j=(i+1)%10;face([low[i],low[j],wide[j],wide[i]],i%3?'#edbe77':'#ffdc96',true);
+          face([wide[i],wide[j],rim[j],rim[i]],'#f7dba1',true);
+        }
+        face(rim,'#fcebc7',true);
+      }
       const fx=-cupboardX,w=Math.min(1.07,span*.72);
       box(fx,1.08,back+.13,w,1.02,.06,walnut);
       setLayer(6);
@@ -220,7 +255,7 @@ function drawHabitat({zone,scene,weather,extent,angle,face,box,pillar,ring,recta
     for(const s of [-1,1]){
       const wx=x+s*w*.33;
       box(wx,.41,z+.30,.47,.48,.075,chalk);
-      face(wallQuad(wx-.17,wx+.17,.47,.83,z+.34),'#819b93');
+      face(wallQuad(wx-.17,wx+.17,.47,.83,z+.34),night?'#ffdb95':'#819b93',night);
       box(wx,.47,z+.345,.035,.36,.036,chalk);
     }
     box(x,.04,z+.31,.50,.86,.11,oak);
@@ -233,6 +268,23 @@ function drawHabitat({zone,scene,weather,extent,angle,face,box,pillar,ring,recta
       box(-edge*.67,.32,rear,edge*.46,.045,.065,oak);
     }
     tree(-edge*.69,rear-.04,1.97,.85);
+    if(night){
+      const lanternBody=['#3d464e','#49525a','#596267','#737979'];
+      for(const x of [-edge*.85,edge*.84]){
+        const z=rear+.56;
+        setLayer(1.5);
+        // Nested light pools sit flat on the path and follow its projection.
+        face(ring(x,.016,z,.58,.43,20),'#ffd79715',true);
+        face(ring(x,.019,z,.34,.25,18),'#ffdb9820',true);
+        setLayer(2);
+        pillar(x,.02,z,.10,.10,.58,lanternBody,8,.8);
+        const low=ring(x,.59,z,.08,.08,8),high=ring(x,.78,z,.114,.114,8);
+        for(let i=0;i<8;i++){
+          const j=(i+1)%8;face([low[i],low[j],high[j],high[i]],i%3?'#f8d698':'#ffeab7',true);
+        }
+        pillar(x,.78,z,.15,.15,.075,lanternBody,8,.55);
+      }
+    }
   }
   return {windowPath,weatherPath};
 }
