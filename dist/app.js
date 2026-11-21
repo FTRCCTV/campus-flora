@@ -102,7 +102,7 @@ function route(){
 }
 window.addEventListener('storage',e=>{if(e.key===gardenKey||e.key===null)route()});
 function detail(r){
-  show('<img class="detailArt" alt="观察记录"><div class="body"><div class="eyebrow">'+(r.demo?'图鉴示例':'校园观察')+'</div><h2>'+esc(r.name)+'</h2><i>'+esc(r.latin)+'</i><p>'+esc(r.note||r.family||'')+'</p><div class="recinfo">'+esc(r.date)+' · '+esc(r.location||'未填写发现地点')+'</div><p>'+esc(placementName(r))+' · '+sizes[r.size]+' · '+habits[r.form]+'</p><div class="management"><button id="move">调整体型与位置</button><button id="replace">替换植物</button><button class="danger" id="remove">移除</button></div><p class="modelnote" id="modelStatus"></p></div>');
+  show('<img class="detailArt" alt="观察记录"><div class="body"><div class="eyebrow">'+(r.gift?'花友分株':r.demo?'图鉴示例':'校园观察')+'</div><h2>'+esc(r.name)+'</h2><i>'+esc(r.latin)+'</i><p>'+esc(r.note||r.family||'')+'</p><div class="recinfo">'+esc(r.date)+' · '+esc(r.location||'未填写发现地点')+'</div><p>'+esc(placementName(r))+' · '+sizes[r.size]+' · '+habits[r.form]+'</p><div class="management"><button id="move">调整体型与位置</button><button id="replace">替换植物</button><button class="danger" id="remove">移除</button></div><p class="modelnote" id="modelStatus"></p></div>');
   body.querySelector('img').src=r.photo;
   $('move').onclick=()=>plantEditor([r],r.photo,r.demo,{editUid:r.uid,previous:r});
   $('replace').onclick=()=>library({replaceUid:r.uid,previous:r,zone:r.zone});
@@ -128,14 +128,14 @@ function fillSelect(id,values,selected,placeholder){
 let paletteUpgradeRunning=false,paletteUpgradeTimer=0;
 function schedulePaletteUpgrade(){
   if(visitingGarden||location.hash!=='#garden'||paletteUpgradeRunning||paletteUpgradeTimer||
-     !collection.some(p=>!p.demo&&!p.palette&&p.photo))return;
+     !collection.some(p=>!p.demo&&!p.gift&&!p.palette&&p.photo))return;
   paletteUpgradeTimer=setTimeout(async()=>{
     paletteUpgradeTimer=0;
     if(visitingGarden||location.hash!=='#garden'||document.hidden)return;
     if(studio.drag||studio.mode!=='view'||studioMoveSave||saveBusy||modal.open)return;
     const owner=gardenAccount.user?.id||null;
     const sameOwner=()=>!visitingGarden&&(gardenAccount.user?.id||null)===owner;
-    const samples=collection.filter(p=>!p.demo&&!p.palette&&p.photo);
+    const samples=collection.filter(p=>!p.demo&&!p.gift&&!p.palette&&p.photo);
     if(!samples.length)return;
     paletteUpgradeRunning=true;
     try{
@@ -163,12 +163,12 @@ function plantEditor(options,photo,demo,context={}){
   fillSelect('size',sizes,prev?.size,'请选择体型');
   fillSelect('bed',Object.fromEntries(Object.entries(places).map(([k,v])=>[k,v.name])),context.zone||prev?.zone||zone,'请选择区域');
   $('place').value=editing?prev.location||'':'';
-  if(!demo){const img=document.createElement('img');img.src=photo;img.alt='本次观察的原始照片';img.className='observation-photo';body.querySelector('.pot-choice').before(img)}
+  if(!demo){const img=document.createElement('img');img.src=photo;img.alt=editing&&prev.gift?'分株模型肖像':'本次观察的原始照片';img.className='observation-photo';body.querySelector('.pot-choice').before(img)}
   const originalUid=context.editUid||context.replaceUid;
   let palette=editing?prev.palette:undefined;
   const swatches=new Map();
   function colorsFor(form){
-    if(demo||editing&&prev.palette)return Promise.resolve(editing?prev.palette:undefined);
+    if(demo||editing&&(prev.palette||prev.gift))return Promise.resolve(editing?prev.palette:undefined);
     if(!swatches.has(form))swatches.set(form,paletteFromPhoto(photo,form).catch(()=>({})));
     return swatches.get(form);
   }

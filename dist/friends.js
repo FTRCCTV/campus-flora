@@ -1,6 +1,6 @@
 let visitingGarden=null;
-async function socialRequest(body,visit){
-  const response=await fetch('/api/friends'+(visit?'?visit='+encodeURIComponent(visit):''),{
+async function socialRequest(body,visit,endpoint='friends'){
+  const response=await fetch('/api/'+endpoint+(visit?'?visit='+encodeURIComponent(visit):''),{
     method:body?'POST':'GET',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined,
     credentials:'same-origin',cache:'no-store',signal:AbortSignal.timeout(15000)
   });
@@ -34,8 +34,36 @@ async function friendsPanel(message=''){
   }
   try{
     const {people}=await socialRequest();if(!active())return;
+    const giftBox=document.createElement('section');list.append(giftBox);
+    async function giftAction(data,button,success){
+      button.disabled=true;
+      try{
+        await socialRequest(data,null,'gifts');
+        if(!active())return;
+        await refreshAccount();
+        if(active())await friendsPanel(success);
+      }catch(e){if(active()){status.textContent=e.message;button.disabled=false}}
+    }
+    async function inbox(){
+      try{
+        const {gifts}=await socialRequest(null,null,'gifts');if(!active()||!gifts.length)return;
+        const title=document.createElement('h3');title.textContent='收到的分株';giftBox.append(title);
+        for(const g of gifts){
+          const row=document.createElement('div'),label=document.createElement('strong'),area=document.createElement('select');
+          row.className='friendRow';label.textContent=g.from+' 赠送的'+g.plant.name;area.setAttribute('aria-label','领取后种在哪里');
+          for(const [key,place] of Object.entries(places))area.add(new Option(place.name,key));
+          area.value=g.plant.zone;row.append(label,area);giftBox.append(row);
+          control(row,'领取并种下',b=>{
+            const canvas=document.createElement('canvas');portrait(canvas,g.plant);
+            giftAction({action:'accept',id:g.id,zone:area.value,cover:canvas.toDataURL('image/jpeg',.82)},b,'分株已种入你的花园。');
+          });
+          control(row,'婉拒',b=>giftAction({action:'decline',id:g.id},b,'已婉拒这份分株。'));
+        }
+      }catch(e){if(active())giftBox.textContent=e.message}
+    }
+    void inbox();
     status.textContent=message;
-    if(!people.length){list.textContent='还没有花友。输入同学的用户名，邀请对方来逛花园。';return}
+    if(!people.length){list.append('还没有花友。输入同学的用户名，邀请对方来逛花园。');return}
     for(const [kind,title] of [['received','收到的申请'],['friends','我的好友'],['sent','已发出的申请']]){
       const group=people.filter(p=>p.status===kind);if(!group.length)continue;
       const h=document.createElement('h3');h.textContent=title;list.append(h);
@@ -55,6 +83,18 @@ async function friendsPanel(message=''){
               if(places[zone].room)indoorZone=zone;else outdoorZone=zone;
               modal.close();location.hash='garden';route();
             }catch(e){if(active()){status.textContent=e.message;b.disabled=false}}
+          });
+          control(row,'赠送分株',()=>{
+            show('<div class="body accountPanel"><h2>赠送分株给'+esc(p.name)+'</h2><p>原株会留在你的花园。对方收到植物模型，可以自行决定种在哪里。</p><label>选择植物<select id="giftPlant"></select></label><button class="primary" id="sendCutting">确认赠送</button><p id="giftMessage" role="status"></p><button class="light" id="giftBack">返回花友</button></div>');
+            const select=$('giftPlant'),send=$('sendCutting'),feedback=$('giftMessage');
+            for(const plant of gardenAccount.records)select.add(new Option(plant.name+' · '+placementName(plant),plant.uid));
+            if(!select.length){send.disabled=true;feedback.textContent='先在自己的花园种下一株植物，就能送出分株。'}
+            $('giftBack').onclick=()=>friendsPanel();
+            send.onclick=async()=>{
+              send.disabled=true;
+              try{await socialRequest({action:'send',id:p.id,uid:select.value},null,'gifts');if(send.isConnected&&modal.open)await friendsPanel('分株已送出，等待对方领取。')}
+              catch(e){feedback.textContent=e.message;send.disabled=false}
+            };
           });
           control(row,'解除好友',b=>{if(confirm('解除与「'+p.name+'」的好友关系？双方将无法互访。'))mutate(b,'remove','已解除好友关系。')});
         }

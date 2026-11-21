@@ -2,8 +2,7 @@ const gardenKey='cau.flora.records.v1';
 const sizes={small:'小型',medium:'中型',large:'大型'};
 const habits={tree:'乔木',shrub:'灌木',flower:'草花',grass:'禾草',rosette:'莲座',herb:'草本'};
 const places={
-  sill:{name:'向阳窗台',room:true},bench:{name:'园艺工作台',room:true},shelf:{name:'木质花架',room:true},
-  pond:{name:'池畔花境',room:false},path:{name:'林荫步道',room:false},meadow:{name:'开放草甸',room:false}
+  sill:{name:'室内花房',room:true},path:{name:'室外花园',room:false}
 };
 const samples=[...plants,...sillExamples];
 function nextSlot(list,zone,except){
@@ -13,20 +12,25 @@ function nextSlot(list,zone,except){
 // Legacy records had no identities or explicit size. Preserve their previous room once,
 // so a later model refinement can never move an existing planting.
 function localGarden(){
-  const raw=localDocument().records;
+  const {records:raw,design}=localDocument();
+  const occupied=raw.filter(p=>Object.hasOwn(places,p.zone)).map(GardenLayout.located).concat(design.decorations);
   const list=[];
   for(const [index,old] of raw.entries()){
     const r={...plants[old.id],...old};
     if(!r.name||!r.latin||!r.photo?.startsWith('data:image/'))continue;
     const legacy=plantProfile({...r,model:cachedModel(r.latin)});
     r.uid ||= 'legacy-'+index+'-'+r.latin;
-    if(!Object.hasOwn(places,r.zone)){
+    const missingZone=!Object.hasOwn(places,r.zone);
+    if(missingZone){
       const outside=r.bed?r.bed==='outside':['tree','shrub'].includes(legacy.form);
       r.zone=outside?'path':'sill';
     }
     if(!Object.hasOwn(sizes,r.size))r.size='medium';
     r.form=legacy.form;
     if(!Number.isFinite(r.x)&&(!Number.isInteger(r.slot)||r.slot<0||list.some(p=>p.zone===r.zone&&p.slot===r.slot)))r.slot=nextSlot(list,r.zone);
+    if(missingZone){
+      Object.assign(r,GardenLayout.place(r,occupied,GardenLayout.located(r)));occupied.push(r);
+    }
     list.push(GardenLayout.located(r));
   }
   return list;

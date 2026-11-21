@@ -33,14 +33,17 @@ function paintStudioScene(canvas,view){
   const ratio=canvas.clientWidth?Math.min(2,window.devicePixelRatio||1):1;
   const pw=Math.round(width*ratio),ph=Math.round(height*ratio);
   if(canvas.width!==pw||canvas.height!==ph){canvas.width=pw;canvas.height=ph}
-  const {zone,scene,weather,angle,zoom,extent,items,selected}=view;
-  const key=[pw,ph,ratio,zone,scene,weather,angle,zoom,extent].join('|');
+  const {zone,scene,weather,angle,zoom,extent,pitch=.53,panX=0,panY=0,items,selected}=view;
+  const spriteKey=[pw,ph,ratio,zone,scene,weather,angle,zoom,extent,pitch].join('|');
+  const key=[spriteKey,panX,panY].join('|');
   let cache=studioViewCaches.get(canvas);
   if(cache?.key!==key){
     const backdrop=document.createElement('canvas');backdrop.width=pw;backdrop.height=ph;
-    const projection=studioProjection(width,height,angle,zoom,extent);
+    const projection=studioProjection(width,height,angle,zoom,extent,pitch,panX,panY);
     const habitat=buildStudioBackdrop(backdrop,view,projection,ratio);
-    cache={key,backdrop,projection,habitat,sprites:new Map(),pixels:0};studioViewCaches.set(canvas,cache);
+    if(cache?.spriteKey===spriteKey)Object.assign(cache,{key,backdrop,projection,habitat});
+    else cache={key,spriteKey,backdrop,projection,habitat,sprites:new Map(),pixels:0};
+    studioViewCaches.set(canvas,cache);
   }
   const {projection,habitat}=cache,ctx=canvas.getContext('2d');
   ctx.setTransform(1,0,0,1,0,0);ctx.drawImage(cache.backdrop,0,0);ctx.setTransform(ratio,0,0,ratio,0,0);
@@ -59,8 +62,8 @@ function paintStudioScene(canvas,view){
       cache.sprites.set(assetKey,asset);cache.pixels+=pixels;
     }
     const r=studioFootprint(item,zone)*projection.scale;
-    ctx.fillStyle='#3549322d';ctx.beginPath();ctx.ellipse(x+1,y+1,r*.96,r*.43,0,0,Math.PI*2);ctx.fill();
-    if(selected===id){ctx.strokeStyle='#466b54';ctx.lineWidth=Math.max(1.5,projection.scale*.055);ctx.beginPath();ctx.ellipse(x,y,r+3,(r+3)*Math.sin(.53),0,0,Math.PI*2);ctx.stroke()}
+    ctx.fillStyle='#3549322d';ctx.beginPath();ctx.ellipse(x+1,y+1,r*.96,Math.max(.6,r*.85*Math.sin(pitch)),0,0,Math.PI*2);ctx.fill();
+    if(selected===id){ctx.strokeStyle='#466b54';ctx.lineWidth=Math.max(1.5,projection.scale*.055);ctx.beginPath();ctx.ellipse(x,y,r+3,(r+3)*Math.sin(pitch),0,0,Math.PI*2);ctx.stroke()}
     layers.push({x:x+asset.left,y:y+asset.top,asset,id,depth});
   }
   layers.sort((a,b)=>a.depth-b.depth);

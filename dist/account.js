@@ -47,12 +47,13 @@ async function saveMemberGarden(update){
 }
 function loginPanel(register=false){
   const title=register?'创建植迹账号':'登录植迹';
-  show('<div class="body accountPanel"><h2>'+title+'</h2><p>用自己的账号，在不同设备上打理同一座花园。</p><form id="gardenLogin" class="authForm"><label>用户名<input id="gardenUsername" name="username" autocomplete="username" required minlength="2" maxlength="24" placeholder="2–24 个字，可用中文"></label><label>密码<input name="password" type="password" autocomplete="'+(register?'new-password':'current-password')+'" minlength="8" maxlength="128" required placeholder="至少 8 个字符"></label><p id="authError" role="status"></p><button class="primary">'+(register?'注册并进入花园':'登录')+'</button></form><div class="authOptions"><button class="smallBtn" id="toggleAuth">'+(register?'已有账号，去登录':'创建新账号')+'</button><button class="smallBtn" id="stayLocal">继续游客体验</button></div></div>');
+  show('<div class="body accountPanel"><h2>'+title+'</h2><p>用自己的账号，在不同设备上打理同一座花园。</p><form id="gardenLogin" class="authForm"><label>用户名<input id="gardenUsername" name="username" autocomplete="username" required minlength="2" maxlength="24" placeholder="2–24 个字，可用中文"></label><label>密码<input name="password" type="password" autocomplete="'+(register?'new-password':'current-password')+'" minlength="8" maxlength="128" required placeholder="至少 8 个字符"></label>'+(register?'<label>确认密码<input name="confirm" type="password" autocomplete="new-password" required maxlength="128" aria-describedby="authError"></label>':'')+'<p id="authError" role="status"></p><button class="primary">'+(register?'注册并进入花园':'登录')+'</button></form><div class="authOptions"><button class="smallBtn" id="toggleAuth">'+(register?'已有账号，去登录':'创建新账号')+'</button><button class="smallBtn" id="stayLocal">继续游客体验</button></div></div>');
   $('stayLocal').onclick=()=>modal.close();
   $('toggleAuth').onclick=()=>loginPanel(!register);
   const form=$('gardenLogin'),error=$('authError');
   form.onsubmit=async event=>{
     event.preventDefault();
+    if(register&&form.elements.password.value!==form.elements.confirm.value){error.textContent='两次输入的密码不一致，请重新确认。';form.elements.confirm.focus();return}
     const button=form.querySelector('button');if(button.disabled)return;
     button.disabled=true;error.textContent='';
     try{

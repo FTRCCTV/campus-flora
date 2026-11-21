@@ -1,5 +1,5 @@
 // Garden studio geometry, projection and picking share one world-space coordinate system.
-const studioPropRadius=Object.freeze({bench:.90,lantern:.36,rock:.62,arch:1.03,planter:.55});
+const studioPropRadius=GardenLayout.propRadii;
 const studioPlantMeshes=new Map();
 function studioIndoor(zone){return ['sill','bench','shelf'].includes(zone)}
 function studioPlantAsset(item,zone){
@@ -18,16 +18,16 @@ function studioFootprint(item,zone){
   return Object.hasOwn(studioPropRadius,item.kind)?studioPropRadius[item.kind]:studioPlantAsset(item,zone||item.zone).radius;
 }
 
-function studioProjection(width,height,angle,zoom,extent){
-  const edge=extent+.62, cp=Math.cos(.53),sp=Math.sin(.53),ca=Math.cos(angle),sa=Math.sin(angle);
+function studioProjection(width,height,angle,zoom,extent,pitch=.53,panX=0,panY=0){
+  const edge=extent+.62, cp=Math.cos(pitch),sp=Math.sin(pitch),ca=Math.cos(angle),sa=Math.sin(angle);
   const scale=zoom*Math.min(width/(2.92*edge+1.35),height/(1.58*edge+3.4));
-  const cx=width*.5,cy=height*.56;
+  const cx=width*(.5+panX),cy=height*(.56+panY);
   function project([x,y,z]){
     const d=x*sa+z*ca;
     return [cx+(x*ca-z*sa)*scale,cy+(d*sp-y*cp)*scale,d*cp+y*sp];
   }
   function ground(px,py){
-    const u=(px-cx)/scale,v=(py-cy)/(sp*scale);
+    const u=(px-cx)/scale,v=sp>.001?(py-cy)/(sp*scale):0;
     return {x:u*ca+v*sa,z:-u*sa+v*ca};
   }
   return {ground,project,scale,edge};
@@ -98,7 +98,9 @@ function studioPropFaces(kind,snowy){
       }
     }
   }
-  prop(kind);return faces;
+  if(['bench','lantern','rock','arch','planter'].includes(kind))prop(kind);
+  else studioSetpiece(kind,{face,...studioPrimitives(face)},snowy);
+  return faces;
 }
 function buildStudioBackdrop(canvas,view,projection,ratio){
   const {scene,weather,zone,angle,extent}=view,width=canvas.width/ratio,height=canvas.height/ratio;

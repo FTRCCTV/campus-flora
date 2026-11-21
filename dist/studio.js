@@ -1,12 +1,12 @@
-const studio={mode:'view',selected:null,angle:.57,zoom:1,scope:'',extent:4,drag:null,picker:null,items:[],frame:0,busy:false};
+const studio={mode:'view',selected:null,angle:.57,pitch:.53,panX:0,panY:0,pan:false,zoom:1,scope:'',extent:4,drag:null,picker:null,items:[],frame:0,busy:false};
 function studioScope(){return [gardenAccount.user?.id||'local',visitingGarden?.id||'own',zone].join('/')}
 function startStudioLayout(uid){
-  studio.scope=studioScope();studio.mode='edit';studio.selected=uid;studio.drag=null;
+  studio.scope=studioScope();studio.pitch=Math.max(.25,studio.pitch);studio.mode='edit';studio.selected=uid;studio.drag=null;
 }
 function studioList(design){
   let specimens=collection;
   if(illustrated&&studio.mode!=='edit'){
-    specimens=[...sillExamples,...plants].map((p,i)=>({...p,uid:'sample-'+i,zone:GardenLayout.zones[i],size:i<3?'medium':'large',x:0,z:0,studioSample:true}));
+    specimens=[...sillExamples,...plants].map((p,i)=>({...p,uid:'sample-'+i,zone:i<3?'sill':'path',size:i<3?'medium':'large',x:[-1.6,.2,1.7,-2.7,.3,2.7][i],z:[.4,-.6,.5,.9,-1.4,1][i],studioSample:true}));
   }
   return [...specimens,...design.decorations].filter(p=>p.zone===zone).map((p,i)=>{
     const entry=GardenLayout.located(p);return {...entry,uid:entry.uid||'visit-'+i};
@@ -17,7 +17,7 @@ function drawStudioFrame(){
   const design=studio.design,drag=studio.drag;
   if(!design)return;
   const items=studio.items.map(p=>drag?.point&&p.uid===drag.id?{...p,...drag.point}:visibleStudioItem(p));
-  studio.picker=paintStudioScene(canvas,{zone,items,scene:design.scene,weather:design.weather,angle:studio.angle,zoom:studio.zoom,extent:studio.extent,selected:studio.mode==='edit'?studio.selected:null});
+  studio.picker=paintStudioScene(canvas,{zone,items,scene:design.scene,weather:design.weather,angle:studio.angle,pitch:studio.pitch,panX:studio.panX,panY:studio.panY,zoom:studio.zoom,extent:studio.extent,selected:studio.mode==='edit'?studio.selected:null});
   updateStudioWeather();
 }
 function scheduleStudio(){if(!studio.frame)studio.frame=requestAnimationFrame(()=>{studio.frame=0;drawStudioFrame()})}
@@ -25,7 +25,7 @@ function renderStudio(){
   const scope=studioScope();
   if(studio.scope!==scope){
     studio.scope=scope;studio.mode='view';studio.selected=null;studio.drag=null;
-    studio.angle=.57;studio.zoom=1;
+    resetStudioCamera();
   }
   const edit=studio.mode==='edit',photo=studio.mode==='photo',design=readDesign();
   studio.design=design;studio.items=studioList(design);
@@ -40,10 +40,11 @@ function renderStudio(){
   $('stage').classList.toggle('photoStudio',photo);
   $('sceneChoice').value=design.scene;$('weatherChoice').value=design.weather;
   $('sceneChoice').disabled=$('weatherChoice').disabled=!!visitingGarden||studio.busy;
+  $('cameraPan').setAttribute('aria-pressed',String(studio.pan));
   if(edit){
     const picker=$('pickObject');picker.replaceChildren(new Option('点选或拖动场景中的物品',''));
     for(const p of studio.items)picker.add(new Option(p.kind?GardenLayout.props[p.kind]:p.name,p.uid));
-    picker.value=studio.selected||'';$('removeProp').hidden=!studio.items.some(p=>p.uid===studio.selected&&p.kind);
+    picker.value=studio.selected||'';$('rotateProp').hidden=$('removeProp').hidden=!studio.items.some(p=>p.uid===studio.selected&&p.kind);
   }
   scheduleStudio();
 }
@@ -104,9 +105,14 @@ function moveStudio(id,point){
 }
 function setStudioMode(mode){
   if(visitingGarden&&mode==='edit')return;
-  studio.mode=mode;studio.drag=null;studio.selected=null;$('layoutStatus').textContent='';
+  if(mode==='edit')studio.pitch=Math.max(.25,studio.pitch);
+  studio.pan=false;studio.mode=mode;studio.drag=null;studio.selected=null;$('layoutStatus').textContent='';
   renderStudio();$('world').focus({preventScroll:true});
 }
+function resetStudioCamera(){
+  Object.assign(studio,{angle:.57,pitch:.53,panX:0,panY:0,zoom:1,pan:false});
+}
+function clampStudioPitch(value){return Math.max(studio.mode==='edit'?.25:0,Math.min(1.42,value))}
 function studioZoom(scale){studio.zoom=Math.max(.55,Math.min(2.65,studio.zoom*scale));scheduleStudio()}
 function initStudio(){
   for(const [id,values] of [['sceneChoice',GardenLayout.scenes],['weatherChoice',GardenLayout.weather],['propChoice',GardenLayout.props]]){
@@ -123,7 +129,14 @@ function initStudio(){
   };
   $('larger').onclick=()=>studioZoom(1.18);$('smaller').onclick=()=>studioZoom(1/1.18);
   $('cameraNear').onclick=$('larger').onclick;$('cameraWide').onclick=$('smaller').onclick;
-  $('resetView').onclick=()=>{studio.angle=.57;studio.zoom=1;scheduleStudio()};
+  $('resetView').onclick=()=>{resetStudioCamera();scheduleStudio()};
+  $('cameraLevel').onclick=()=>{studio.pitch=0;scheduleStudio()};
+  $('cameraAbove').onclick=()=>{studio.pitch=1.12;scheduleStudio()};
+  $('cameraPan').onclick=()=>{studio.pan=!studio.pan;$('cameraPan').setAttribute('aria-pressed',String(studio.pan))};
+  $('rotateProp').onclick=()=>saveStudio((_,design)=>{
+    const p=design.decorations.find(item=>item.uid===studio.selected&&item.zone===zone);
+    if(p)p.rotation=((p.rotation||0)+Math.PI/4)%(Math.PI*2);
+  },'装饰朝向已保存。');
   $('pickObject').onchange=e=>{studio.selected=e.target.value||null;renderStudio()};
   $('addProp').onclick=()=>saveStudio((records,design)=>{
     const p={uid:crypto.randomUUID(),kind:$('propChoice').value,zone};
@@ -140,9 +153,9 @@ function initStudio(){
     if(!studio.picker||studio.drag||e.button!==0||studio.busy)return;
     const [x,y]=local(e),id=studio.picker.hit(x,y),pt=studio.picker.ground(x,y);
     const stored=studio.items.find(p=>p.uid===id),item=stored&&visibleStudioItem(stored);
-    studio.drag={pid:e.pointerId,x,y,id,angle:studio.angle,moved:false,origin:pt,item,scope:studioScope()};
+    studio.drag={pid:e.pointerId,x,y,id,angle:studio.angle,pitch:studio.pitch,panX:studio.panX,panY:studio.panY,panning:studio.mode==='photo'&&(studio.pan||e.shiftKey),moved:false,origin:pt,item,scope:studioScope()};
     canvas.setPointerCapture(e.pointerId);
-    if(studio.mode==='edit'&&id){studio.selected=id;$('pickObject').value=id;$('removeProp').hidden=!item?.kind;scheduleStudio()}
+    if(studio.mode==='edit'&&id){studio.selected=id;$('pickObject').value=id;$('rotateProp').hidden=$('removeProp').hidden=!item?.kind;scheduleStudio()}
   };
   canvas.onpointermove=e=>{
     const d=studio.drag;if(!d||d.pid!==e.pointerId)return;
@@ -150,7 +163,13 @@ function initStudio(){
     if(studio.mode==='edit'&&d.item){
       const pt=studio.picker.ground(x,y);
       d.point={x:d.item.x+pt.x-d.origin.x,z:d.item.z+pt.z-d.origin.z};
-    }else studio.angle=d.angle+(x-d.x)*.009;
+    }else if(d.panning){
+      studio.panX=Math.max(-1,Math.min(1,d.panX+(x-d.x)/canvas.clientWidth));
+      studio.panY=Math.max(-1,Math.min(1,d.panY+(y-d.y)/canvas.clientHeight));
+    }else{
+      studio.angle=d.angle+(x-d.x)*.009;
+      studio.pitch=clampStudioPitch(d.pitch+(y-d.y)*.006);
+    }
     scheduleStudio();
   };
   canvas.onpointercancel=()=>{studio.drag=null;scheduleStudio()};
@@ -177,13 +196,18 @@ function initStudio(){
     if(!Object.hasOwn(deltas,e.key))return;e.preventDefault();
     const target=studio.items.find(p=>p.uid===studio.selected),p=target&&visibleStudioItem(target);
     if(studio.mode==='edit'&&p){const [dx,dz]=deltas[e.key];void moveStudio(p.uid,{x:p.x+dx,z:p.z+dz})}
-    else{studio.angle+=e.key==='ArrowLeft'||e.key==='ArrowUp'?-.12:.12;scheduleStudio()}
+    else{
+      const [dx,dy]=deltas[e.key];
+      if(studio.mode==='photo'&&studio.pan){studio.panX=Math.max(-1,Math.min(1,studio.panX+dx/4));studio.panY=Math.max(-1,Math.min(1,studio.panY+dy/4))}
+      else{studio.angle+=dx;studio.pitch=clampStudioPitch(studio.pitch-dy)}
+      scheduleStudio();
+    }
   };
   $('shutter').onclick=()=>{
     const photo=document.createElement('canvas'),ratio=canvas.clientHeight/Math.max(1,canvas.clientWidth);
     photo.width=1920;photo.height=Math.max(1,Math.round(1920*ratio));
     const design=readDesign();
-    const frame=paintStudioScene(photo,{zone,items:studio.items.map(visibleStudioItem),scene:design.scene,weather:design.weather,angle:studio.angle,zoom:studio.zoom,extent:studio.extent,selected:null});
+    const frame=paintStudioScene(photo,{zone,items:studio.items.map(visibleStudioItem),scene:design.scene,weather:design.weather,angle:studio.angle,pitch:studio.pitch,panX:studio.panX,panY:studio.panY,zoom:studio.zoom,extent:studio.extent,selected:null});
     const layer=document.createElement('canvas');
     paintStudioWeather(layer,frame,zone,design.weather,matchMedia('(prefers-reduced-motion:reduce)').matches?0:performance.now()/1000);
     const ctx=photo.getContext('2d');ctx.resetTransform();ctx.drawImage(layer,0,0);
