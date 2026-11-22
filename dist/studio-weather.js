@@ -1,5 +1,29 @@
 // Weather has a transparent surface so raindrops never trigger a mesh redraw.
-function paintStudioWeather(canvas,frame,zone,weather,seconds){
+function paintStudioWeather(canvas,frame,zone,weather,seconds,effect='none'){
+  paintStudioClimate(canvas,frame,zone,weather,seconds);
+  if(effect!=='petals'&&effect!=='fireflies')return;
+  const ctx=canvas.getContext('2d'),{width:w,height:h,ratio}=frame;
+  ctx.save();ctx.setTransform(ratio,0,0,ratio,0,0);
+  const fire=effect==='fireflies';
+  for(let i=0;i<(fire?17:14);i++){
+    const phase=i*2.39996;
+    const x=fire?w*(.07+.86*((i*47%101)/101)) + Math.sin(seconds*.42+phase)*18:
+      ((i*109+seconds*(12+i%4)+22*Math.sin(seconds*.7+phase))%(w+44)+w+44)%(w+44)-22;
+    const y=fire?h*(.34+.46*((i*67%101)/101))+Math.cos(seconds*.48+phase)*13:
+      ((i*79+seconds*(16+i%5))%(h+28))-14;
+    ctx.save();ctx.translate(x,y);
+    if(fire){
+      ctx.globalAlpha=.55+.35*Math.sin(seconds*1.4+phase);ctx.shadowColor='#edcc59';ctx.shadowBlur=7*ratio;
+      ctx.fillStyle='#fff1a6';ctx.beginPath();ctx.arc(0,0,2.1,0,Math.PI*2);ctx.fill();
+    }else{
+      ctx.rotate(phase+seconds*.8);ctx.fillStyle=i%2?'#e7a49c':'#f3c2b4';
+      ctx.beginPath();ctx.ellipse(0,0,4.8,1.8+Math.abs(Math.sin(phase+seconds)),0,0,Math.PI*2);ctx.fill();
+    }
+    ctx.restore();
+  }
+  ctx.restore();
+}
+function paintStudioClimate(canvas,frame,zone,weather,seconds){
   const {width:w,height:h,ratio}=frame,pw=Math.round(w*ratio),ph=Math.round(h*ratio);
   if(canvas.width!==pw||canvas.height!==ph){canvas.width=pw;canvas.height=ph}
   const ctx=canvas.getContext('2d');
@@ -45,9 +69,9 @@ function updateStudioWeather(){
     cancelAnimationFrame(studioClimate.raf);studioClimate.raf=0;return;
   }
   const reduced=matchMedia('(prefers-reduced-motion:reduce)').matches;
-  const now=performance.now(),interval=studio.design.weather==='sunny'?100:33;
+  const now=performance.now(),interval=studio.design.weather==='sunny'&&(!studio.design.effect||studio.design.effect==='none')?100:33;
   if(now-studioClimate.last>=interval||studioClimate.last===-1){
-    paintStudioWeather($('studioWeather'),frame,zone,studio.design.weather,reduced?0:now/1000);
+    paintStudioWeather($('studioWeather'),frame,zone,studio.design.weather,reduced?0:now/1000,studio.design.effect);
     studioClimate.last=now;
   }
   if(!reduced&&!studioClimate.raf)studioClimate.raf=requestAnimationFrame(()=>{studioClimate.raf=0;updateStudioWeather()});

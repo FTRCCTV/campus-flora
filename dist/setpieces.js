@@ -41,7 +41,41 @@ function studioSetpiece(kind,{face,ring,loft,rectangle,box,pillar},snowy){
     }
   }
 
-  if(kind==='terrarium'){
+  if(kind==='herbmarker'){
+    pillar(0,0,0,.14,.14,.055,slate,10);
+    box(0,.05,0,.055,.50,.055,walnut);
+    box(0,.50,0,.58,.28,.06,brass);
+    box(0,.524,.031,.53,.232,.009,enamel);
+    for(const x of [-.235,.235])box(x,.625,.04,.022,.022,.01,brass);
+    tube([-.085,.56,.043],[.065,.705,.043],.009,.006,brass,6);
+    for(const [x,y,s] of [[-.04,.60,-1],[0,.635,1],[.035,.674,-1]]){
+      face([[x,y,.046],[x+.053*s,y+.019,.046],[x+.068*s,y+.068,.046],[x+.012*s,y+.046,.046]],'#e1c789');
+    }
+  }else if(kind==='birdbath'){
+    pillar(0,0,0,.31,.31,.10,slate,16,.92);
+    pillar(0,.095,0,.16,.16,.47,porcelain,14,.65);
+    pillar(0,.55,0,.13,.13,.08,porcelain,14,1.5);
+    loft(ring(0,.615,0,.18,.18,20),ring(0,.76,0,.47,.47,20),enamel);
+    const lip=ring(0,.795,0,.48,.48,20),pool=ring(0,.777,0,.409,.409,20);
+    const lower=ring(0,.754,0,.467,.467,20);
+    for(let i=0;i<20;i++){const j=(i+1)%20;face([lower[i],lower[j],lip[j],lip[i]],porcelain[i%3])}
+    for(let i=0;i<20;i++){const j=(i+1)%20;face([lip[i],lip[j],pool[j],pool[i]],porcelain[2])}
+    face(ring(0,.797,0,.406,.406,20),snowy?'#e5ede4':'#86b8b5');
+    for(const x of [-.16,.10])face(ring(x,.799,x*.4,.064,.012,10),'#c6ded0');
+  }else if(kind==='sundial'){
+    pillar(0,0,0,.34,.34,.12,slate,8,.94);
+    pillar(0,.11,0,.17,.17,.49,slate,10,.79);
+    pillar(0,.59,0,.18,.18,.07,brass,12,1.42);
+    pillar(0,.65,0,.50,.50,.09,slate,24,1.04);
+    face(ring(0,.743,0,.48,.48,32),'#c3a465');
+    face(ring(0,.745,0,.425,.425,32),'#718979');
+    for(let h=0;h<24;h++){
+      const a=h*Math.PI/12,c=Math.cos(a),s=Math.sin(a),r=h%3?.378:.32;
+      face([[r*c,.749,r*s],[.411*c,.749,.411*s],[.411*c-.012*s,.749,.411*s+.012*c],[r*c-.012*s,.749,r*s+.012*c]],'#eddebc');
+    }
+    for(const x of [-.018,.018])face([[x,.75,-.19],[x,1.06,-.16],[x,.75,.23]],'#a1793f');
+    face([[-.018,1.06,-.16],[.018,1.06,-.16],[.018,.75,.23],[-.018,.75,.23]],'#e4c886');
+  }else if(kind==='terrarium'){
     const w=.99,d=.66,eave=.82,peak=1.11;
     box(0,0,0,w+.06,.09,d+.06,walnut);
     box(0,.081,0,w,.12,d,brass);

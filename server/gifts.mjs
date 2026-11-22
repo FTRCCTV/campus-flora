@@ -52,6 +52,7 @@ export async function giftsApi(request,env){
       const p={...gift.plant,uid:crypto.randomUUID(),zone:b.zone,photo:b.cover,gift:true,date:new Date().toISOString().slice(0,10)};
       Object.assign(p,GardenLayout.place(p,garden.records.concat(garden.design.decorations)));
       garden.records.push(p);
+      garden.design.discovered=GardenLayout.discoveries([p],garden.design.discovered);
     }
     garden.gifts.splice(idx,1);
     return saveGiftGarden(env,garden);

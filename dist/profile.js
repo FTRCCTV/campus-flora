@@ -463,7 +463,12 @@ function floraTraitLabels(profile){
 }
 const floraSourceNames = {species:'校园图鉴株形',model:'AI 物种档案',genus:'属级特征',family:'科级特征',form:'基础株形'};
 function plantChineseName(latin){const entry=floraLookup(latin);return entry?.level==='species'?entry.name:null}
-const FloraCatalog = {lookup:floraLookup,labels:floraTraitLabels,vocab:floraVocab,foliage:floraFoliage,bloom:floraBloom,bark:floraBark,accent:floraAccent,
+function collectedSpeciesKey(latin){
+  const key=floraKey(latin);
+  if(!/^[a-z][a-z-]+ [a-z][a-z-]+$/.test(key)||/ (sp|spp|cf|aff)$/.test(key))return '';
+  return Object.hasOwn(floraAliases,key)?floraAliases[key]:key;
+}
+const FloraCatalog = {speciesKey:collectedSpeciesKey,lookup:floraLookup,labels:floraTraitLabels,vocab:floraVocab,foliage:floraFoliage,bloom:floraBloom,bark:floraBark,accent:floraAccent,
   sources:floraSourceNames,species:()=>[...floraIndex.keys()],genera:()=>Object.keys(floraGenera),families:()=>Object.keys(floraFamilies),name:plantChineseName};
 globalThis.plantProfile=plantProfile;globalThis.FloraCatalog=FloraCatalog;
 const sillExamples=[

@@ -21,7 +21,7 @@ export async function friendsApi(request,env){
         const outgoing=edge.sender===user.id,peer=outgoing?edge.recipient:edge.sender;
         const garden=await env.BUCKET.get('gardens/v1/'+encodeURIComponent(peer)+'.json');
         const {records,design}=GardenLayout.unpack(garden?await garden.json():[]);
-        return authJson({name:outgoing?edge.recipient_name:edge.sender_name,plants:records.map(sharedPlant),design});
+        return authJson({name:outgoing?edge.recipient_name:edge.sender_name,plants:records.map(sharedPlant),design:{scene:design.scene,weather:design.weather,effect:design.effect,decorations:design.decorations}});
       }
       const {results}=await db.prepare('SELECT * FROM garden_friends WHERE sender=? OR recipient=? ORDER BY rowid DESC').bind(user.id,user.id).all();
       return authJson({people:results.map(edge=>{

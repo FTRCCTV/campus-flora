@@ -35,7 +35,13 @@ function localGarden(){
   }
   return list;
 }
-function localDocument(){return GardenLayout.unpack(JSON.parse(localStorage.getItem(gardenKey)||'[]'))}
+function localDocument(){
+  const data=GardenLayout.unpack(JSON.parse(localStorage.getItem(gardenKey)||'[]'));
+  // Early local records referred to a catalogue entry by its numeric index.
+  const legacy=data.records.filter(r=>!r.latin&&plants[r.id]).map(r=>plants[r.id]);
+  if(legacy.length)data.design.discovered=GardenLayout.discoveries(legacy,data.design.discovered);
+  return data;
+}
 function readDesign(){return visitingGarden?.design||activeStudioDraft()?.design|| (gardenAccount.user?gardenAccount.design:localDocument().design)}
 function readGarden(){
   if(activeStudioDraft())return activeStudioDraft().records;
@@ -49,6 +55,7 @@ async function writeGarden(update){
     if(gardenAccount.mode==='member')return saveMemberGarden(update);
     if(gardenAccount.mode!=='guest')throw Error('请等账号连接完成，或在账号面板中重试。');
     const list=localGarden(),design=localDocument().design;update(list,design);
+    design.discovered=GardenLayout.discoveries(list,design.discovered);
     if(!GardenLayout.valid(list,design))throw Error('物品重叠或位置无效。');
     localStorage.setItem(gardenKey,JSON.stringify({records:list,design}));
   };

@@ -41,6 +41,7 @@ async function saveMemberGarden(update){
     });
     const data=await response.json();
     if(!response.ok){reload=response.status===409||response.status===401;throw Error(data.error||'同步失败，修改未保存。')}
+    design.discovered=data.discovered??GardenLayout.discoveries(list,design.discovered);
     gardenAccount.version=data.version;gardenAccount.records=list;gardenAccount.design=design;
   }catch(error){
     if(error instanceof TypeError||error.name==='TimeoutError'){reload=true;throw Error('连接中断，请刷新花园确认保存状态。')}
@@ -102,7 +103,8 @@ function accountPanel(){
   const ids=new Set(gardenAccount.records.map(r=>r.uid));
   const pending=guest.filter(r=>!ids.has(r.uid));
   const guestDesign=localDocument().design;
-  const localDecor=guestDesign.decorations.filter(p=>!gardenAccount.design.decorations.some(d=>d.uid===p.uid));
+  const importCount=GardenLayout.discoveries(pending,gardenAccount.design.discovered).length;
+  const localDecor=guestDesign.decorations.filter(p=>GardenLayout.unlocked(p.kind,importCount)&&!gardenAccount.design.decorations.some(d=>d.uid===p.uid));
   show('<div class="body accountPanel"><h2>'+esc(user.name)+'</h2><h3>账号花园</h3><p>已保存 '+gardenAccount.records.length+' 条观察。种植、调整和移除均同步到此账号。</p><h3>本机记录</h3><p>'+ (pending.length||localDecor.length?'可导入 '+pending.length+' 条本机观察和 '+localDecor.length+' 件装饰。位置冲突时会自动挪开。':'没有待导入的本机记录。')+'</p><button class="primary" id="importGarden">导入本机花园</button><p role="status" id="accountFeedback"></p><button class="light" id="changePassword">修改密码</button><button class="light" id="endSession">退出账号</button></div>');
   $('changePassword').onclick=passwordPanel;
   $('endSession').onclick=async event=>{
@@ -128,9 +130,10 @@ function accountPanel(){
           additions.push(r);existing.add(r.uid);
         }
         if(sourceDesign){
-          if(!list.length&&!design.decorations.length){design.scene=sourceDesign.scene;design.weather=sourceDesign.weather}
+          const count=GardenLayout.discoveries(list.concat(additions),design.discovered).length;
+          if(!list.length&&!design.decorations.length){design.scene=sourceDesign.scene;design.weather=sourceDesign.weather;const effect=sourceDesign.effect||'none';if(GardenLayout.unlocked(effect,count))design.effect=effect}
           for(const p of sourceDesign.decorations){
-            if(existing.has(p.uid)||design.decorations.some(d=>d.uid===p.uid))continue;
+            if(!GardenLayout.unlocked(p.kind,count)||existing.has(p.uid)||design.decorations.some(d=>d.uid===p.uid))continue;
             const pt=GardenLayout.place(p,list.concat(additions,design.decorations),p);
             design.decorations.push({...p,...pt});
           }

@@ -64,18 +64,21 @@ export async function accountGarden(request,env){
       design=GardenLayout.empty();
     }
     if(!Array.isArray(design?.decorations)||design.decorations.length>300||design.decorations.some(p=>!p||typeof p!=='object'))return send({error:'装饰数据无效。'},400);
-    const normalized=GardenLayout.unpack({records:data.records,design});
+    const current=await env.BUCKET.get(objectKey);
+    if((current?.httpEtag||'new')!==data.version)return send({error:'花园已有更新，请刷新后重试。'},409);
+    const previous=current?await current.json():[];
+    const history=GardenLayout.unpack(previous).design.discovered;
+    // Earn discoveries from saved specimens. A client cannot award itself extra milestones.
+    const normalized=GardenLayout.unpack({records:data.records,design:{...design,discovered:history}});
     data.records=normalized.records;design=normalized.design;
     if(!GardenLayout.valid(data.records,design))return send({error:'物品超出布置范围或彼此重叠，请重新摆放。'},400);
     // The inbox and garden share one version. Preserve unopened gifts on ordinary editor saves.
-    const current=await env.BUCKET.get(objectKey);
-    if((current?.httpEtag||'new')!==data.version)return send({error:'花园已有更新，请刷新后重试。'},409);
-    const gifts=current?(await current.json()).gifts||[]:[];
-    const serialized=JSON.stringify({records:data.records,design:{scene:design.scene,weather:design.weather,decorations:design.decorations},gifts});
+    const gifts=previous.gifts||[];
+    const serialized=JSON.stringify({records:data.records,design:{scene:design.scene,weather:design.weather,effect:design.effect,discovered:design.discovered,decorations:design.decorations},gifts});
     if(new TextEncoder().encode(serialized).length>maxBytes)return send({error:'花园已超过同步容量。'},413);
     const condition=data.version==='new'?{'If-None-Match':'*'}:{'If-Match':data.version};
     const saved=await env.BUCKET.put(objectKey,serialized,{onlyIf:new Headers(condition),httpMetadata:{contentType:'application/json'}});
     if(!saved)return send({error:'另一台设备已更新花园。已请求最新记录，请重新操作。'},409);
-    return send({version:saved.httpEtag});
+    return send({version:saved.httpEtag,discovered:design.discovered});
   }catch{return send({error:'同步服务暂不可用，请稍后重试。'},503)}
 }

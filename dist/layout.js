@@ -3,9 +3,24 @@ const GardenLayout=(()=>{
   const legacyZones={bench:'sill',shelf:'sill',pond:'path',meadow:'path'};
   const scenes={campus:'校园植物园',terrace:'屋顶露台',courtyard:'中式庭院',starlight:'繁星之夜'};
   const weather={sunny:'晴天',rain:'细雨',snow:'飘雪'};
-  const props={bench:'木长椅',lantern:'庭园灯',rock:'景石',arch:'花架拱门',planter:'装饰花槽',terrarium:'玻璃生态箱',worktable:'园艺操作台',plantstand:'三层盆栽架',wateringcan:'珐琅浇水壶',teatable:'庭院茶桌',steppingstones:'苔石步道',fence:'木栅栏',fountain:'双层石泉'};
-  const propRadii={bench:.90,lantern:.36,rock:.62,arch:1.03,planter:.55,terrarium:.64,worktable:.84,plantstand:.66,wateringcan:.70,teatable:.48,steppingstones:.76,fence:.80,fountain:.61};
-  const empty=()=>({scene:'campus',weather:'sunny',decorations:[]});
+  const props={bench:'木长椅',lantern:'庭园灯',rock:'景石',arch:'花架拱门',planter:'装饰花槽',terrarium:'玻璃生态箱',worktable:'园艺操作台',plantstand:'三层盆栽架',wateringcan:'珐琅浇水壶',teatable:'庭院茶桌',steppingstones:'苔石步道',fence:'木栅栏',fountain:'双层石泉',herbmarker:'黄铜植物铭牌',birdbath:'青瓷鸟浴盆',sundial:'日晷观测台'};
+  const propRadii={bench:.90,lantern:.36,rock:.62,arch:1.03,planter:.55,terrarium:.64,worktable:.84,plantstand:.66,wateringcan:.70,teatable:.48,steppingstones:.76,fence:.80,fountain:.61,herbmarker:.33,birdbath:.50,sundial:.55};
+  const effects={none:'关闭',petals:'风送花瓣',fireflies:'流萤微光'};
+  const rewards=[
+    {at:1,id:'herbmarker',label:props.herbmarker},{at:3,id:'petals',label:effects.petals},
+    {at:5,id:'birdbath',label:props.birdbath},{at:6,id:'fireflies',label:effects.fireflies},
+    {at:10,id:'sundial',label:props.sundial}
+  ];
+  function discoveries(records,previous=[]){
+    const keys=new Set(Array.isArray(previous)?previous:[]);
+    for(const p of records){
+      const key=globalThis.FloraCatalog.speciesKey(p.latin);
+      if(key)keys.add(key);
+    }
+    return [...keys];
+  }
+  function unlocked(id,count){return !rewards.some(r=>r.id===id&&count<r.at)}
+  const empty=()=>({scene:'campus',weather:'sunny',effect:'none',discovered:[],decorations:[]});
   function unpack(value){
     const records=Array.isArray(value)?value:value?.records||[],design=value?.design||empty();
     const all=[...records,...design.decorations],moved=new Map();
@@ -17,7 +32,7 @@ const GardenLayout=(()=>{
       occupied.push(item);moved.set(p,item);
     }
     const convert=p=>moved.get(p)||p;
-    return {records:records.map(convert),design:{...design,decorations:design.decorations.map(convert)}};
+    return {records:records.map(convert),design:{...design,effect:design.effect??'none',discovered:discoveries(records,design.discovered),decorations:design.decorations.map(convert)}};
   }
   function radius(p){
     if(p.kind)return propRadii[p.kind]*(p.scale??1);
@@ -45,6 +60,9 @@ const GardenLayout=(()=>{
     terrarium:[box(0,0,0,1.05,.21,.72),box(0,.21,0,1.02,.61,.69),box(0,.82,0,1.03,.29,.69)],
     wateringcan:[disk(-.10,0,0,.26,.53),box(.27,.09,0,.40,.30,.16),box(.52,.36,0,.32,.28,.18)],
     steppingstones:[disk(-.47,.015,.13,.27,.105),disk(0,.015,-.14,.27,.065),disk(.46,.015,.10,.27,.115)],
+    herbmarker:[disk(0,0,0,.14,.06),box(0,.05,0,.055,.48,.055),box(0,.50,0,.58,.28,.07)],
+    birdbath:[disk(0,0,0,.32,.13),disk(0,.13,0,.13,.47),disk(0,.60,0,.48,.22)],
+    sundial:[disk(0,0,0,.34,.12),disk(0,.12,0,.17,.51),disk(0,.63,0,.53,.13),box(0,.76,0,.08,.31,.43)],
     fountain:[disk(0,0,0,.607,.205),disk(0,.205,0,.122,.41),disk(0,.61,0,.26,.13),disk(0,.74,0,.037,.12)]
   };
   const openProps=new Set(['arch','bench','worktable','plantstand','teatable','fence','wateringcan','steppingstones']);
@@ -184,6 +202,8 @@ const GardenLayout=(()=>{
   }
   function valid(records,design){
     if(!design||!Object.hasOwn(scenes,design.scene)||!Object.hasOwn(weather,design.weather)||!Array.isArray(design.decorations)||design.decorations.length>300)return false;
+    const count=discoveries(records,design.discovered).length,effect=design.effect??'none';
+    if(!Object.hasOwn(effects,effect)||!unlocked(effect,count)||design.decorations.some(p=>!unlocked(p?.kind,count)))return false;
     const ids=new Set(),prior=[];
     for(const [index,p] of [...records,...design.decorations].entries()){
       if(!p||!zones.includes(p.zone)||typeof p.uid!=='string'||!p.uid||p.uid.length>400||ids.has(p.uid))return false;
@@ -200,6 +220,6 @@ const GardenLayout=(()=>{
     }
     return true;
   }
-  return {zones,scenes,weather,props,propRadii,empty,unpack,radius,located,clear,place,valid,setSpecimenMesh};
+  return {rewards,effects,discoveries,unlocked,zones,scenes,weather,props,propRadii,empty,unpack,radius,located,clear,place,valid,setSpecimenMesh};
 })();
 globalThis.GardenLayout=GardenLayout;

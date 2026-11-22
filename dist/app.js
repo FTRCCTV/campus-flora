@@ -170,7 +170,7 @@ function plantFact(plant){
 }
 function plantEditor(options,photo,demo,context={}){
   const prev=context.previous,editing=!!context.editUid,replacing=!!context.replaceUid;
-  show('<div class="body"><div class="eyebrow">PLANTING DESK</div><h2>'+(editing?'调整植株':replacing?'确认替换':'种植工作台')+'</h2><div class="pot-choice"><canvas id="previewPlant"></canvas><div><label>植物名称<select id="species"></select></label><i id="taxonomy"></i></div></div><section class="plantFact"><strong>植物小科普</strong><p id="speciesFact"></p><div class="traitChips" id="speciesTraits"></div><p id="profileProgress" role="status" hidden></p></section><label>展示大小<select id="size"></select></label><label>种植区域<select id="bed"></select></label><label>发现地点（选填）<input id="place" maxlength="60"></label><p id="actionNote"></p><button class="primary" id="save">确定</button><p id="feedback" class="error" role="status"></p></div>');
+  show('<div class="body"><div class="eyebrow">PLANTING DESK</div><h2>'+(editing?'调整植株':replacing?'确认替换':'种植工作台')+'</h2><div class="pot-choice"><canvas id="previewPlant"></canvas><div><label>植物名称<select id="species"></select></label><i id="taxonomy"></i></div></div><section class="plantFact"><strong>植物小科普</strong><p id="speciesFact"></p><div class="traitChips" id="speciesTraits"></div><p id="profileProgress" role="status" hidden></p></section><label>展示大小<select id="size"></select></label><label>种植区域<select id="bed"></select></label><label>发现地点（选填）<input id="place" maxlength="60"></label><p id="discoveryHint" class="discoveryHint" role="status"></p><p id="actionNote"></p><button class="primary" id="save">确定</button><p id="feedback" class="error" role="status"></p></div>');
   options.forEach((r,i)=>$('species').add(new Option(r.name+(Number.isFinite(r.score)?' · '+(100*r.score).toFixed(1)+'%':''),i)));
   fillSelect('size',sizes,prev?.size,'请选择体型');
   fillSelect('bed',Object.fromEntries(Object.entries(places).map(([k,v])=>[k,v.name])),context.zone||prev?.zone||zone,'请选择区域');
@@ -200,6 +200,11 @@ function plantEditor(options,photo,demo,context={}){
     });
     const progress=$('profileProgress'),fact=$('speciesFact');
     fact.textContent=plantFact(selected);
+    const history=GardenLayout.discoveries(readGarden().filter(r=>r.uid!==originalUid),readDesign().discovered);
+    const key=FloraCatalog.speciesKey(selected.latin),hint=$('discoveryHint');
+    hint.hidden=editing||!key;
+    const total=history.length+1,reward=GardenLayout.rewards.find(r=>r.at===total);
+    hint.textContent=history.includes(key)?'手记已收录这个物种。':'新物种 · 保存后累计 '+total+' 种'+(reward?'，解锁「'+reward.label+'」':'')+'。';
     progress.hidden=true;progress.classList.remove('modelPending');
     if(demo||fileDemo||cachedModel(selected.latin)||curatedSpecies(selected.latin))return;
     progress.hidden=false;progress.classList.add('modelPending');progress.textContent='正在细化叶形、叶序和花序…';
@@ -209,7 +214,12 @@ function plantEditor(options,photo,demo,context={}){
       if(speciesPicker.isConnected&&modal.open&&selected===options[Number(speciesPicker.value)]){
         progress.classList.remove('modelPending');progress.hidden=false;
         progress.textContent=ready?'物种模型已就绪':modelErrors.get(profileKey(selected.latin))||'暂用基础株形，可在手记中重试。';
-        fact.textContent=plantFact(selected);updatePreview();
+        fact.textContent=plantFact(selected);
+    const history=GardenLayout.discoveries(readGarden().filter(r=>r.uid!==originalUid),readDesign().discovered);
+    const key=FloraCatalog.speciesKey(selected.latin),hint=$('discoveryHint');
+    hint.hidden=editing||!key;
+    const total=history.length+1,reward=GardenLayout.rewards.find(r=>r.at===total);
+    hint.textContent=history.includes(key)?'手记已收录这个物种。':'新物种 · 保存后累计 '+total+' 种'+(reward?'，解锁「'+reward.label+'」':'')+'。';updatePreview();
       }
     },450);
   }

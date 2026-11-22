@@ -49,7 +49,7 @@ function mergeStudioDraft(d,records,design){
   }
   mergeList(d.baseRecords,d.records,records);
   mergeList(d.baseDesign.decorations,d.design.decorations,design.decorations);
-  fields(d.baseDesign,d.design,design,['scene','weather']);
+  fields(d.baseDesign,d.design,design,['scene','weather','effect']);
 }
 async function commitStudioDraft(){
   if(studio.busy||visitingGarden)return;
@@ -62,7 +62,12 @@ async function commitStudioDraft(){
       mergeStudioDraft(d,records,design);
       for(const p of records){const traits=localPlantTraits(p);if(traits.model){p.model=traits.model;p.form=traits.form}if(traits.palette)p.palette=traits.palette}
     });
-    if(studioDraft===d){studioDraft=null;studio.mode='view';studio.selected=null;toast(d.owner==='local'?'布置已保存在本机。':'布置已同步到账号。')}
+    if(studioDraft===d){
+      studioDraft=null;studio.mode='view';studio.selected=null;
+      const before=d.baseDesign.discovered?.length||0,after=readDesign().discovered?.length||0;
+      const earned=GardenLayout.rewards.filter(r=>r.at>before&&r.at<=after);
+      toast(earned.length?'收集达到 '+after+' 种，已解锁「'+earned.map(r=>r.label).join('」「')+'」！':after>before?'新物种已记入手记，累计 '+after+' 种。':d.owner==='local'?'布置已保存在本机。':'布置已同步到账号。');
+    }
   }catch(e){toast(e.message);$('layoutStatus').textContent=e.message}
   finally{studio.busy=false;route()}
 }

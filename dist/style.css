@@ -242,3 +242,12 @@ dialog:not(#bookIntro)::backdrop { background: #192d25a8; }
   font-size: 23px; cursor: grab; touch-action: none; user-select: none;
 }
 #rotateHandle:active { cursor: grabbing; }
+
+.rewardBook{margin:0 0 14px;padding:12px 16px;border:1px solid #c8bea4;border-radius:6px;background:#f7f4e9;color:#324c3c}
+.rewardBook summary{cursor:pointer;line-height:1.8}.rewardBook summary strong{font-family:var(--serif,serif);margin-right:1em}.rewardBook summary span{font-size:.9rem}
+.rewardBook progress{width:6.5rem;height:.55rem;accent-color:#476e50;vertical-align:middle;margin:0 .8rem}
+.rewardBook p{margin:.6rem 0;color:#586251;font-size:.9rem}.rewardShelf{display:grid;grid-template-columns:repeat(auto-fit,minmax(115px,1fr));gap:.65rem}
+.rewardShelf>div{display:grid;gap:.4rem;padding:.6rem;border:1px solid #cac0aa;border-radius:4px;background:#fffaf0;text-align:center}
+.rewardShelf canvas{width:100%;height:66px;object-fit:contain;background:#f0ead9;border-radius:3px}.rewardShelf canvas.nightSwatch{background:#344643}
+.rewardShelf .locked canvas{filter:saturate(.55)}.rewardShelf .smallBtn{padding:.35rem .5rem;margin:0}.rewardShelf .smallBtn:disabled{opacity:1;color:#6d695b;background:#eee9dc;border-color:#d7cfbd;cursor:default}
+@media(max-width:600px){.rewardBook progress{width:4rem}.rewardBook #nextReward{display:block}.rewardShelf{grid-template-columns:repeat(2,minmax(0,1fr))}}

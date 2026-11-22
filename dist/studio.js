@@ -35,7 +35,7 @@ function renderStudio(){
     resetStudioCamera();
   }
   const edit=studio.mode==='edit',photo=studio.mode==='photo',design=readDesign();
-  studio.design=design;studio.items=studioList(design);
+  studio.design=design;studio.items=studioList(design);renderRewards(design);
   studio.extent=Math.max(edit?studio.extent:3.25,3.25,...studio.items.map(p=>Math.max(Math.abs(p.x),Math.abs(p.z))+GardenLayout.radius(p)+.45));
   if(!studio.items.some(p=>p.uid===studio.selected))studio.selected=null;
   for(const b of $('zones').children)b.setAttribute('aria-pressed',b.dataset.zone===zone);
@@ -101,10 +101,10 @@ function resetStudioCamera(){
 function clampStudioPitch(value){return Math.max(studio.mode==='edit'?.25:0,Math.min(1.42,value))}
 function studioZoom(scale){studio.zoom=Math.max(.55,Math.min(2.65,studio.zoom*scale));scheduleStudio()}
 function initStudio(){
-  for(const [id,values] of [['sceneChoice',GardenLayout.scenes],['weatherChoice',GardenLayout.weather],['propChoice',GardenLayout.props]]){
+  for(const [id,values] of [['sceneChoice',GardenLayout.scenes],['weatherChoice',GardenLayout.weather],['effectChoice',GardenLayout.effects],['propChoice',GardenLayout.props]]){
     for(const [key,label] of Object.entries(values))$(id).add(new Option(label,key));
   }
-  for(const [id,key] of [['sceneChoice','scene'],['weatherChoice','weather']])$(id).onchange=e=>{
+  for(const [id,key] of [['sceneChoice','scene'],['weatherChoice','weather'],['effectChoice','effect']])$(id).onchange=e=>{
     const value=e.target.value;void editStudioLayout((_,design)=>{design[key]=value});
   };
   $('layoutMode').onclick=()=>studio.mode==='edit'?commitStudioDraft():setStudioMode('edit');
@@ -242,7 +242,7 @@ function initStudio(){
     const design=readDesign();
     const frame=paintStudioScene(photo,{zone,items:studio.items,scene:design.scene,weather:design.weather,angle:studio.angle,pitch:studio.pitch,panX:studio.panX,panY:studio.panY,zoom:studio.zoom,extent:studio.extent,selected:null});
     const layer=document.createElement('canvas');
-    paintStudioWeather(layer,frame,zone,design.weather,matchMedia('(prefers-reduced-motion:reduce)').matches?0:performance.now()/1000);
+    paintStudioWeather(layer,frame,zone,design.weather,matchMedia('(prefers-reduced-motion:reduce)').matches?0:performance.now()/1000,design.effect);
     const ctx=photo.getContext('2d');ctx.resetTransform();ctx.drawImage(layer,0,0);
     photo.toBlob(blob=>{
       if(!blob){toast('照片生成失败，请重试。');return}
