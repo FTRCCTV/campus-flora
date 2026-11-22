@@ -310,4 +310,5 @@ function paintSpecimen(canvas, plant, {potted=false,portrait=true,width=520,heig
     ctx.closePath();ctx.fill();ctx.stroke();
   }
 }
+GardenLayout.setSpecimenMesh(specimenMesh);
 function paintPot(canvas,plant){paintSpecimen(canvas,plant,{potted:true,portrait:false,width:300,height:320})}

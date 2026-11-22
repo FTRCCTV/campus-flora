@@ -67,7 +67,7 @@ function studioSprite(item,view,projection,ratio,reusable){
 }
 function paintStudioScene(canvas,view){
   const width=canvas.clientWidth||canvas.width,height=canvas.clientHeight||canvas.height;
-  const ratio=canvas.clientWidth?Math.min(2,window.devicePixelRatio||1):1;
+  const ratio=canvas.clientWidth?Math.min(view.orbiting?1:2,window.devicePixelRatio||1):1;
   const pw=Math.round(width*ratio),ph=Math.round(height*ratio);
   if(canvas.width!==pw||canvas.height!==ph){canvas.width=pw;canvas.height=ph}
   const {zone,scene,weather,angle,zoom,extent,pitch=.53,panX=0,panY=0,items,selected}=view;
@@ -100,9 +100,9 @@ function paintStudioScene(canvas,view){
         const first=cache.sprites.keys().next().value,old=cache.sprites.get(first);
         cache.pixels-=old.image.width*old.image.height;cache.sprites.delete(first);
       }
-      cache.sprites.set(assetKey,asset);cache.pixels+=pixels;
+      asset.radius=studioFootprint(item,zone);cache.sprites.set(assetKey,asset);cache.pixels+=pixels;
     }
-    const r=studioFootprint(item,zone)*projection.scale;
+    const r=asset.radius*projection.scale;
     ctx.fillStyle='#3549322d';ctx.beginPath();ctx.ellipse(x+1,y+1,r*.96,Math.max(.6,r*.85*Math.sin(pitch)),0,0,Math.PI*2);ctx.fill();
     if(selected===id){ctx.strokeStyle='#466b54';ctx.lineWidth=Math.max(1.5,projection.scale*.055);ctx.beginPath();ctx.ellipse(x,y,r+3,(r+3)*Math.sin(pitch),0,0,Math.PI*2);ctx.stroke()}
     layers.push({x:x+asset.left,y:y+asset.top,asset,id,depth});

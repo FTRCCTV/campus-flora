@@ -1,6 +1,6 @@
 // Architectural scenery hugs the edge of the editable garden. The rear wall
 // and its glazing share the same projection as picking and the weather mask.
-function drawHabitat({zone,scene,weather,extent,angle,face,box,pillar,ring,rectangle,project,setLayer}){
+function drawHabitat({zone,scene,weather,extent,angle,face,box,pillar,ring,rectangle,setLayer}){
   const inside=['sill','bench','shelf'].includes(zone),snow=weather==='snow',wet=weather==='rain',night=scene==='starlight';
   const edge=extent+.62,rear=-edge+.06;
   const oak=['#a47953','#ba9064','#a98258','#deb482'];
@@ -12,10 +12,6 @@ function drawHabitat({zone,scene,weather,extent,angle,face,box,pillar,ring,recta
   const brick=['#a56552','#b47b60','#c78a68','#d8a37f'];
   const slate=['#5d6d73','#697c7d','#7c8987',snow?'#e6ece4':'#94a098'];
   let windowPath=null,weatherPath=null;
-  function pathFor(vertices,path=new Path2D()){
-    vertices.forEach((v,i)=>{const [x,y]=project(v);if(i===0)path.moveTo(x,y);else path.lineTo(x,y)});
-    path.closePath();return path;
-  }
   function wallQuad(x1,x2,y1,y2,z){
     return [[x1,y1,z],[x2,y1,z],[x2,y2,z],[x1,y2,z]];
   }
@@ -116,7 +112,7 @@ function drawHabitat({zone,scene,weather,extent,angle,face,box,pillar,ring,recta
       box(0,wallH-.04,back,roomHalf*2+.12,.10,.21,oak);
       box(0,.40,back+.1,roomHalf*2,.10,.15,oak);
       const paneZ=back+.079,pane=wallQuad(-win,win,bottom,top,paneZ);
-      windowPath=pathFor(pane);
+      windowPath=[pane];
       setLayer(3);
       const glass=night?(wet?'#344251':snow?'#4a5a70':'#273852'):wet?'#b4cbd1':snow?'#d0dee1':'#b8dbd6';
       const distant=night?'#4a6071':wet?'#859c98':snow?'#acbfbc':'#95b5a3',near=night?'#374f57':wet?'#748d86':snow?'#bacabb':'#86a185';
@@ -153,11 +149,11 @@ function drawHabitat({zone,scene,weather,extent,angle,face,box,pillar,ring,recta
       const mull=.058,cy=bottom+(top-bottom)*.60;
       for(const x of [-win,-win/3,win/3,win])box(x-.008,bottom-.04,paneZ+.044,.07,top-bottom+.09,.09,oak);
       for(const y of [bottom,cy,top])box(0,y,paneZ+.061,win*2+.12,mull,.11,chalk);
-      weatherPath=new Path2D();
+      weatherPath=[];
       for(let i=0;i<3;i++){
         const x0=-win+i*win*2/3+.048,x1=x0+win*2/3-.096;
-        pathFor(wallQuad(x0,x1,bottom+.044,cy-.036,paneZ),weatherPath);
-        pathFor(wallQuad(x0,x1,cy+.036,top-.044,paneZ),weatherPath);
+        weatherPath.push(wallQuad(x0,x1,bottom+.044,cy-.036,paneZ));
+        weatherPath.push(wallQuad(x0,x1,cy+.036,top-.044,paneZ));
       }
       box(0,bottom-.075,paneZ+.10,2*win+.30,.095,.42,oak);
       // Gathered linen blind, herbarium plates and an apothecary cupboard.

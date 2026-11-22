@@ -16,7 +16,6 @@ function cachedModel(latin){
 }
 async function refinePlant(r){
   const k=profileKey(r.latin);
-  const owner=gardenAccount.user?.id;
   if(cachedModel(r.latin))return true;
   if(location.protocol==='file:')return false;
   if(inFlight.has(k))return inFlight.get(k);
@@ -31,10 +30,6 @@ async function refinePlant(r){
       }
       const {model}=await response.json();if(!model||!Object.hasOwn(plantProfiles,model.form))return false;
       modelErrors.delete(k);modelCache.set(k,model);try{localStorage.setItem(k,JSON.stringify(model))}catch{}
-      if(owner&&gardenAccount.user?.id===owner&&gardenAccount.records.some(plant=>profileKey(plant.latin)===k)){
-        try{await writeGarden(list=>{for(const plant of list)if(profileKey(plant.latin)===k){plant.model=model;plant.form=model.form}})}
-        catch{toast('株形已缓存在本机，云端株形同步未完成。')}
-      }
       return true;
     }catch{modelErrors.set(k,'精细模型暂未完成，可在手记中重试。');return false}
   })();
@@ -93,7 +88,7 @@ function route(){
   $('gardenTitle').textContent=visiting?visitingGarden.name+'的植物园':'我的植物园';
   $('notesTitle').textContent=visiting?'花园里的植物':'观察手记';
   $('backGarden').hidden=!visiting;$('add').hidden=visiting;$('trial').hidden=visiting;$('friends').hidden=visiting;
-  try{collection=visiting?visitingGarden.plants:readGarden().map(r=>{const model=cachedModel(r.latin)||r.model;return {...r,model,form:plantProfile({...r,model}).form}})}catch{collection=[];toast('浏览器暂时无法读取观察记录。')}
+  try{collection=visiting?visitingGarden.plants:readGarden().map(localPlantTraits)}catch{collection=[];toast('浏览器暂时无法读取观察记录。')}
   illustrated=!visiting&&!collection.length&&!readDesign().decorations.length;if(!visiting)$('qty').textContent=collection.length;
   if(!garden){home();return}renderStudio();schedulePaletteUpgrade();
   $('records').replaceChildren(...collection.map(r=>thumbButton(r,()=>visiting?sharedDetail(r):detail(r),placementName(r)+' · '+sizes[r.size])));
@@ -109,7 +104,7 @@ function detail(r){
   $('remove').onclick=()=>{
     show('<div class="body"><h2>移除'+esc(r.name)+'？</h2><p>将删除这条观察记录和照片，并腾出'+esc(placementName(r))+'。</p><div class="management"><button id="cancel">保留植物</button><button class="danger" id="confirmRemove">确认移除</button></div><p role="status" id="feedback"></p></div>');
     $('cancel').onclick=()=>detail(r);$('confirmRemove').onclick=async()=>{
-      try{await writeGarden(list=>{const i=list.findIndex(x=>x.uid===r.uid);if(i<0)throw Error('这条记录已移除。');list.splice(i,1)});modal.close();route();toast('植物已移除')}catch(e){$('feedback').textContent=e.message}
+      try{changeStudioDraft(list=>{const i=list.findIndex(x=>x.uid===r.uid);if(i<0)throw Error('这条记录已移除。');list.splice(i,1)});modal.close();location.hash='garden';setStudioMode('edit');route();toast('已从本地布置移除，保存后生效。')}catch(e){$('feedback').textContent=e.message}
     };
   };
   const status=$('modelStatus'),k=profileKey(r.latin);status.textContent=cachedModel(r.latin)?'已应用物种模型':modelErrors.get(k)||'当前显示基础模型';
@@ -124,7 +119,12 @@ function fillSelect(id,values,selected,placeholder){
   el.value=selected||'';
 }
 // Upgrade original observations with their own photo colours, once per photo.
-// Wait until interaction is idle and save all matched records in one garden write.
+// Sample idle observations locally; attach pending traits only on explicit save.
+const observedColors=new Map();
+function localPlantTraits(p){
+  const sampled=observedColors.get(p.uid),model=cachedModel(p.latin)||p.model;
+  return {...p,model,form:plantProfile({...p,model}).form,palette:p.palette||(sampled?.photo===p.photo?sampled?.palette:undefined)};
+}
 let paletteUpgradeRunning=false,paletteUpgradeTimer=0;
 function schedulePaletteUpgrade(){
   if(visitingGarden||location.hash!=='#garden'||paletteUpgradeRunning||paletteUpgradeTimer||
@@ -132,7 +132,7 @@ function schedulePaletteUpgrade(){
   paletteUpgradeTimer=setTimeout(async()=>{
     paletteUpgradeTimer=0;
     if(visitingGarden||location.hash!=='#garden'||document.hidden)return;
-    if(studio.drag||studio.mode!=='view'||studioMoveSave||saveBusy||modal.open)return;
+    if(studio.drag||studio.mode!=='view'||activeStudioDraft()||saveBusy||modal.open)return;
     const owner=gardenAccount.user?.id||null;
     const sameOwner=()=>!visitingGarden&&(gardenAccount.user?.id||null)===owner;
     const samples=collection.filter(p=>!p.demo&&!p.gift&&!p.palette&&p.photo);
@@ -146,11 +146,9 @@ function schedulePaletteUpgrade(){
         colors.set(p.uid,{photo:p.photo,palette});
         await new Promise(resolve=>setTimeout(resolve,0));
       }
-      if(colors.size&&sameOwner()&&!studio.drag&&!studioMoveSave&&!saveBusy){
-        await writeGarden(list=>{
-          for(const p of list){const sampled=colors.get(p.uid);if(sampled?.photo===p.photo&&!p.palette)p.palette=sampled.palette}
-        });
-        if(sameOwner())route();
+      if(colors.size&&sameOwner()){
+        for(const [uid,color] of colors)observedColors.set(uid,color);
+        route();
       }
     }catch{/* A later garden visit can retry interrupted backfills. */}
     finally{paletteUpgradeRunning=false}
@@ -211,14 +209,14 @@ function plantEditor(options,photo,demo,context={}){
   selectSpecies();
   speciesPicker.onchange=selectSpecies;$('size').onchange=updatePreview;
   $('actionNote').textContent=replacing?'保存后，新植株会替换「'+prev.name+'」及其观察记录。':'';
-  $('save').textContent=editing?'保存调整':replacing?'确认替换原植物':'种下并布置';
+  $('save').textContent=editing?'应用到布置':replacing?'确认替换原植物':'种下并布置';
   $('save').onclick=async()=>{
     const p=options[Number($('species').value)],form=plantProfile({...p,model:cachedModel(p.latin)||p.model}).form,size=$('size').value,selected=$('bed').value;
     if(!size||!selected){$('feedback').textContent='请选择展示大小和区域。';return}
     const plantedId=editing?originalUid:crypto.randomUUID(),locationText=$('place').value.trim(),button=$('save');button.disabled=true;
     try{
       const photoPalette=await colorsFor(form);
-      await writeGarden((list,design)=>{
+      changeStudioDraft((list,design)=>{
         const index=originalUid?list.findIndex(x=>x.uid===originalUid):-1;
         if(originalUid&&index<0)throw Error('原记录已变更，请重新选择。');
         const data={form,size,zone:selected,location:locationText};
@@ -230,7 +228,7 @@ function plantEditor(options,photo,demo,context={}){
         if(replacing)list.splice(index,1,record);else list.unshift(record);
       });
       zone=selected;if(places[zone].room)indoorZone=zone;else outdoorZone=zone;
-      modal.close();location.hash='garden';startStudioLayout(plantedId);route();toast(editing?'调整已保存':replacing?'已替换植物':'已种入花园');
+      modal.close();location.hash='garden';startStudioLayout(plantedId);route();toast('已加入本地布置，完成后点「保存布置」。');
       if(!demo)void refinePlant(p);
     }catch(e){$('feedback').textContent=e.name==='QuotaExceededError'?'浏览器存储已满，本次修改未保存。':e.message;button.disabled=false}
   };

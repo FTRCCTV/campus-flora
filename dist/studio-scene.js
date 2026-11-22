@@ -177,7 +177,35 @@ function buildStudioBackdrop(canvas,view,projection,ratio){
       if(i%5===0)ctx.fillRect(bx+bw*.42,by-height*.027,bw*.1,height*.03);
     }
   }
-  const projected=[];
+  const geometry=studioBackdropGeometry(view,edge);
+  const projected=geometry.faces.map(f=>{
+    const p=f.vertices.map(project);
+    return {p,layer:f.layer,color:f.color,depth:p.reduce((sum,v)=>sum+v[2],0)/p.length};
+  });
+  projected.sort((a,b)=>a.layer-b.layer||a.depth-b.depth);
+  ctx.lineJoin='round';ctx.lineWidth=.32;
+  for(const f of projected){
+    ctx.beginPath();f.p.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y));ctx.closePath();
+    ctx.fillStyle=ctx.strokeStyle=f.color;ctx.fill();ctx.stroke();
+  }
+  function projectPath(polygons){
+    if(!polygons)return null;
+    const path=new Path2D();
+    for(const poly of polygons){
+      poly.forEach((v,i)=>{const [x,y]=project(v);if(i)path.lineTo(x,y);else path.moveTo(x,y)});
+      path.closePath();
+    }
+    return path;
+  }
+  return {windowPath:projectPath(geometry.windowPath),weatherPath:projectPath(geometry.weatherPath)};
+}
+
+const studioWorldGeometry=new Map();
+function studioBackdropGeometry({zone,scene,weather,angle,extent},edge){
+  const inside=studioIndoor(zone),night=scene==='starlight',terrace=scene==='terrace',court=scene==='courtyard',snowy=weather==='snow';
+  const key=[zone,scene,weather,extent,inside&&Math.cos(angle)>-.1,inside&&Math.sin(angle)>-.15].join('|');
+  if(studioWorldGeometry.has(key))return studioWorldGeometry.get(key);
+  const faces=[];
   let layer=0;
   const moonlit=new Map();
   function nightMaterial(color){
@@ -189,9 +217,8 @@ function buildStudioBackdrop(canvas,view,projection,ratio){
     return moonlit.get(color);
   }
   function face(vertices,color,emissive=false){
-    const p=vertices.map(project);
     const drawLayer=layer===2&&vertices.every(v=>v[1]<-.04)?-1:layer;
-    projected.push({p,color:night&&!emissive?nightMaterial(color):color,layer:drawLayer,depth:p.reduce((sum,v)=>sum+v[2],0)/p.length});
+    faces.push({vertices,color:night&&!emissive?nightMaterial(color):color,layer:drawLayer});
   }
   const {ring,box,pillar,rectangle}=studioPrimitives(face);
   const floor=inside?['#cba47f','#af8968','#c39872',zone==='shelf'?'#cda77d':zone==='bench'?'#c2a07b':'#dfc5a1']:
@@ -213,12 +240,9 @@ function buildStudioBackdrop(canvas,view,projection,ratio){
   }
   layer=2;
   // Landmarks stay in world space as the visitor turns the camera.
-  const habitat=drawHabitat({zone,scene,weather,extent,angle,face,box,pillar,ring,rectangle,project,setLayer:n=>{layer=n}});
-  projected.sort((a,b)=>a.layer-b.layer||a.depth-b.depth);
-  ctx.lineJoin='round';ctx.lineWidth=.32;
-  for(const f of projected){
-    ctx.beginPath();f.p.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y));ctx.closePath();
-    ctx.fillStyle=ctx.strokeStyle=f.color;ctx.fill();ctx.stroke();
-  }
-  return habitat;
+  const habitat=drawHabitat({zone,scene,weather,extent,angle,face,box,pillar,ring,rectangle,setLayer:n=>{layer=n}});
+  const geometry={faces,...habitat};
+  if(studioWorldGeometry.size>=6)studioWorldGeometry.delete(studioWorldGeometry.keys().next().value);
+  studioWorldGeometry.set(key,geometry);
+  return geometry;
 }

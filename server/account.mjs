@@ -1,5 +1,7 @@
 import {currentUser} from './auth.mjs';
 import '../dist/layout.js';
+import '../dist/profile.js';
+import '../dist/specimen.js';
 function checkGarden(items){
   if(!Array.isArray(items)||items.length>800)return false;
   const ids=new Set();

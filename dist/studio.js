@@ -1,11 +1,11 @@
 const studio={mode:'view',selected:null,angle:.57,pitch:.53,panX:0,panY:0,pan:false,zoom:1,scope:'',extent:4,drag:null,picker:null,items:[],frame:0,busy:false};
 function studioScope(){return [gardenAccount.user?.id||'local',visitingGarden?.id||'own',zone].join('/')}
 function startStudioLayout(uid){
-  studio.scope=studioScope();studio.pitch=Math.max(.25,studio.pitch);studio.mode='edit';studio.selected=uid;studio.drag=null;
+  studio.scope=studioScope();studio.pitch=Math.max(.25,studio.pitch);studio.mode='edit';studio.selected=uid;studio.drag=null;$('layoutStatus').textContent='有未保存的布置。';
 }
 function studioList(design){
-  let specimens=collection;
-  if(illustrated&&studio.mode!=='edit'){
+  let specimens=activeStudioDraft()?.records.map(localPlantTraits)||collection;
+  if(illustrated&&!specimens.length&&!design.decorations.length&&studio.mode!=='edit'){
     specimens=[...sillExamples,...plants].map((p,i)=>({...p,uid:'sample-'+i,zone:i<3?'sill':'path',size:i<3?'medium':'large',x:[-1.6,.2,1.7,-2.7,.3,2.7][i],z:[.4,-.6,.5,.9,-1.4,1][i],studioSample:true}));
   }
   return [...specimens,...design.decorations].filter(p=>p.zone===zone).map((p,i)=>{
@@ -16,15 +16,15 @@ function drawStudioFrame(){
   const canvas=$('world');if(!canvas.clientWidth||!canvas.clientHeight)return;
   const design=studio.design,drag=studio.drag;
   if(!design)return;
-  const items=studio.items.map(p=>drag?.point&&p.uid===drag.id?{...p,...drag.point}:visibleStudioItem(p));
-  studio.picker=paintStudioScene(canvas,{zone,items,scene:design.scene,weather:design.weather,angle:studio.angle,pitch:studio.pitch,panX:studio.panX,panY:studio.panY,zoom:studio.zoom,extent:studio.extent,selected:studio.mode==='edit'?studio.selected:null});
+  const items=drag?.point?studio.items.map(p=>p.uid===drag.id?{...p,...drag.point}:p):studio.items;
+  studio.picker=paintStudioScene(canvas,{zone,items,orbiting:drag?.moved&&!(studio.mode==='edit'&&drag.item)&&!drag.panning,scene:design.scene,weather:design.weather,angle:studio.angle,pitch:studio.pitch,panX:studio.panX,panY:studio.panY,zoom:studio.zoom,extent:studio.extent,selected:studio.mode==='edit'?studio.selected:null});
   studioClimate.last=-1;updateStudioWeather();
 }
 function scheduleStudio(){if(!studio.frame)studio.frame=requestAnimationFrame(()=>{studio.frame=0;drawStudioFrame()})}
 function renderStudio(){
   const scope=studioScope();
   if(studio.scope!==scope){
-    studio.scope=scope;studio.mode='view';studio.selected=null;studio.drag=null;
+    studio.scope=scope;studio.mode=activeStudioDraft()?'edit':'view';studio.selected=null;studio.drag=null;
     resetStudioCamera();
   }
   const edit=studio.mode==='edit',photo=studio.mode==='photo',design=readDesign();
@@ -35,8 +35,9 @@ function renderStudio(){
   $('sceneLabel').textContent=(illustrated&&!edit?'示例 · ':'')+places[zone].name;
   $('returnRoom').textContent=places[zone].room?'推窗去室外':'返回室内';
   $('layoutMode').hidden=!!visitingGarden;$('layoutMode').disabled=!['guest','member'].includes(gardenAccount.mode);
-  $('layoutMode').textContent=edit?'完成布置':'布置花园';$('layoutMode').setAttribute('aria-pressed',edit);
+  $('layoutMode').textContent=edit?(studio.busy?'正在保存…':'保存布置'):'布置花园';$('layoutMode').setAttribute('aria-pressed',edit);
   $('gardenModelLoad').hidden=!studio.items.some(p=>p.latin&&inFlight.has(profileKey(p.latin)));
+  $('layoutMode').disabled||=studio.busy;$('cancelLayout').hidden=!edit;$('cancelLayout').disabled=studio.busy;
   $('layoutTools').hidden=!edit;$('cameraControls').hidden=!photo;
   $('stage').classList.toggle('photoStudio',photo);
   $('sceneChoice').value=design.scene;$('weatherChoice').value=design.weather;
@@ -55,64 +56,35 @@ function studioSelectionTools(){
   $('potControl').hidden=!item||!!item.kind||!studioIndoor(zone);
   $('propScale').value=String(item?.scale??1);$('potStyle').value=item?.potStyle||'clay';
 }
-async function saveStudio(change,message){
+function editStudioLayout(change){
   if(studio.busy||visitingGarden)return;
-  const scope=studioScope();studio.busy=true;
   try{
-    if(studioMoveSave)await studioMoveSave;
-    await writeGarden((records,design)=>{if(scope!==studioScope()||visitingGarden)throw Error('场景已切换，请重新操作。');change(records,design)});
-    if(scope===studioScope()){$('layoutStatus').textContent=message||''}
+    changeStudioDraft(change);
+    if(studio.mode!=='edit')setStudioMode('edit');
+    $('layoutStatus').textContent='有未保存的布置。';
   }catch(e){$('layoutStatus').textContent=e.message;toast(e.message)}
-  finally{studio.busy=false;route()}
-}
-// Keep released objects at their visible positions while the account save is in flight.
-const studioMoves=new Map();
-let studioMoveSave=null;
-function visibleStudioItem(p){
-  const move=studioMoves.get(p.uid);
-  return move&&move.scope===studioScope()?{...p,...move.point}:p;
-}
-async function flushStudioMoves(){
-  try{
-    while(studioMoves.size){
-      const batch=[...studioMoves.values()];
-      if(batch.some(move=>move.owner!==(gardenAccount.user?.id||null)))throw Error('账号已切换，请重新布置。');
-      await writeGarden((records,design)=>{
-        const all=records.concat(design.decorations);
-        for(const {id,area,point} of batch){
-          const item=all.find(p=>p.uid===id&&p.zone===area);
-          if(!item)throw Error('物品位置已变更，请重新选择。');
-          Object.assign(item,point);
-        }
-      });
-      for(const move of batch){
-        const displayed=move.scope===studioScope()&&studio.items.find(p=>p.uid===move.id);
-        if(displayed)Object.assign(displayed,move.point);
-        if(studioMoves.get(move.id)===move)studioMoves.delete(move.id);
-      }
-    }
-    $('layoutStatus').textContent='位置已保存。';
-  }catch(e){
-    studioMoves.clear();$('layoutStatus').textContent=e.message;toast(e.message);
-  }finally{studioMoveSave=null;route()}
+  renderStudio();
 }
 function moveStudio(id,point){
   if(!point||!id||studio.busy||visitingGarden)return;
   const pos={x:Math.round(point.x*1000)/1000,z:Math.round(point.z*1000)/1000};
-  const all=studio.items.map(visibleStudioItem),p=all.find(item=>item.uid===id);
+  const all=studio.items,p=all.find(item=>item.uid===id);
   if(!p)return;
   const bound=studio.extent-GardenLayout.radius(p);
   const message=Math.max(Math.abs(pos.x),Math.abs(pos.z))>bound?'请放在台面或地面范围内。':
     !GardenLayout.clear({...p,...pos},all)?'这里会与其他物品重叠，请换个位置。':'';
   if(message){$('layoutStatus').textContent=message;toast(message);scheduleStudio();return}
-  studioMoves.set(id,{id,point:pos,scope:studioScope(),area:zone,owner:gardenAccount.user?.id||null});
-  $('layoutStatus').textContent='正在保存位置…';scheduleStudio();
-  if(!studioMoveSave)studioMoveSave=flushStudioMoves();
-  return studioMoveSave;
+  const d=beginStudioDraft();
+  const list=p.kind?d.design.decorations:d.records;
+  const next=list.map(item=>item.uid===id?{...item,...pos}:item);
+  if(p.kind)d.design={...d.design,decorations:next};else d.records=next;
+  Object.assign(p,pos);d.dirty=true;
+  $('layoutStatus').textContent='有未保存的布置。';
+  scheduleStudio();
 }
 function setStudioMode(mode){
   if(visitingGarden&&mode==='edit')return;
-  if(mode==='edit')studio.pitch=Math.max(.25,studio.pitch);
+  if(mode==='edit'){if(!activeStudioDraft())beginStudioDraft();studio.pitch=Math.max(.25,studio.pitch)}
   studio.pan=false;studio.mode=mode;studio.drag=null;studio.selected=null;$('layoutStatus').textContent='';
   renderStudio();$('world').focus({preventScroll:true});
 }
@@ -126,10 +98,11 @@ function initStudio(){
     for(const [key,label] of Object.entries(values))$(id).add(new Option(label,key));
   }
   for(const [id,key] of [['sceneChoice','scene'],['weatherChoice','weather']])$(id).onchange=e=>{
-    const value=e.target.value;void saveStudio((_,design)=>{design[key]=value});
+    const value=e.target.value;void editStudioLayout((_,design)=>{design[key]=value});
   };
-  $('layoutMode').onclick=()=>setStudioMode(studio.mode==='edit'?'view':'edit');
-  $('photoMode').onclick=()=>setStudioMode('photo');$('exitPhoto').onclick=()=>setStudioMode('view');
+  $('layoutMode').onclick=()=>studio.mode==='edit'?commitStudioDraft():setStudioMode('edit');
+  $('cancelLayout').onclick=discardStudioDraft;
+  $('photoMode').onclick=()=>setStudioMode('photo');$('exitPhoto').onclick=()=>setStudioMode(activeStudioDraft()?'edit':'view');
   $('returnRoom').onclick=()=>{
     selectZone(places[zone].room?outdoorZone:indoorZone);
     if(!matchMedia('(prefers-reduced-motion:reduce)').matches)$('world').animate([{opacity:.25,transform:'scale(.97)'},{opacity:1,transform:'scale(1)'}],{duration:380});
@@ -142,37 +115,37 @@ function initStudio(){
   $('cameraPan').onclick=()=>{studio.pan=!studio.pan;$('cameraPan').setAttribute('aria-pressed',String(studio.pan))};
   $('potStyle').onchange=e=>{
     const value=e.target.value,id=studio.selected;
-    void saveStudio(records=>{const p=records.find(p=>p.uid===id&&p.zone===zone);if(p)p.potStyle=value},'花盆材质已保存。');
+    void editStudioLayout(records=>{const p=records.find(p=>p.uid===id&&p.zone===zone);if(p)p.potStyle=value});
   };
   $('propScale').onchange=e=>{
     const value=Number(e.target.value),id=studio.selected;
-    void saveStudio((records,design)=>{
+    void editStudioLayout((records,design)=>{
       const p=design.decorations.find(p=>p.uid===id&&p.zone===zone);
       if(!p)throw Error('请重新选择摆件。');
       if(!GardenLayout.clear({...p,scale:value},records.concat(design.decorations)))throw Error('放大后会重叠，请先挪出空间。');
       p.scale=value;
-    },'摆件比例已保存。');
+    });
   };
-  $('rotateProp').onclick=()=>saveStudio((_,design)=>{
+  $('rotateProp').onclick=()=>editStudioLayout((_,design)=>{
     const p=design.decorations.find(item=>item.uid===studio.selected&&item.zone===zone);
     if(p)p.rotation=((p.rotation||0)+Math.PI/4)%(Math.PI*2);
-  },'装饰朝向已保存。');
+  });
   $('pickObject').onchange=e=>{studio.selected=e.target.value||null;renderStudio()};
-  $('addProp').onclick=()=>saveStudio((records,design)=>{
+  $('addProp').onclick=()=>editStudioLayout((records,design)=>{
     const p={uid:crypto.randomUUID(),kind:$('propChoice').value,zone};
     Object.assign(p,GardenLayout.place(p,records.concat(design.decorations)));
     design.decorations.push(p);studio.selected=p.uid;
-  },'装饰已摆入，可拖动调整。');
-  $('removeProp').onclick=()=>saveStudio((_,design)=>{
+  });
+  $('removeProp').onclick=()=>editStudioLayout((_,design)=>{
     const i=design.decorations.findIndex(p=>p.uid===studio.selected&&p.zone===zone);
     if(i>=0)design.decorations.splice(i,1);studio.selected=null;
-  },'装饰已移除。');
+  });
   const canvas=$('world');
   function local(e){const b=canvas.getBoundingClientRect();return [e.clientX-b.left,e.clientY-b.top]}
   canvas.onpointerdown=e=>{
     if(!studio.picker||studio.drag||e.button!==0||studio.busy)return;
     const [x,y]=local(e),id=studio.picker.hit(x,y),pt=studio.picker.ground(x,y);
-    const stored=studio.items.find(p=>p.uid===id),item=stored&&visibleStudioItem(stored);
+    const stored=studio.items.find(p=>p.uid===id),item=stored;
     studio.drag={pid:e.pointerId,x,y,id,angle:studio.angle,pitch:studio.pitch,panX:studio.panX,panY:studio.panY,panning:studio.mode==='photo'&&(studio.pan||e.shiftKey),moved:false,origin:pt,ground:studio.picker.ground,item,scope:studioScope()};
     canvas.setPointerCapture(e.pointerId);
     if(studio.mode==='edit'&&id){studio.selected=id;$('pickObject').value=id;studioSelectionTools();scheduleStudio()}
@@ -189,7 +162,7 @@ function initStudio(){
       studio.panY=Math.max(-1,Math.min(1,d.panY+(y-d.y)/canvas.clientHeight));
     }else{
       studio.angle=d.angle-(x-d.x)*.009;
-      studio.pitch=clampStudioPitch(d.pitch-(y-d.y)*.006);
+      studio.pitch=clampStudioPitch(d.pitch+(y-d.y)*.006);
     }
     scheduleStudio();
   };
@@ -211,16 +184,16 @@ function initStudio(){
   };
   canvas.onwheel=e=>{e.preventDefault();studioZoom(Math.exp(-Math.sign(e.deltaY)*.12))};
   canvas.onkeydown=e=>{
-    if(e.key==='Escape'){if(studio.mode!=='view')setStudioMode('view');return}
+    if(e.key==='Escape'){if(studio.mode==='edit')discardStudioDraft();else if(studio.mode==='photo')setStudioMode(activeStudioDraft()?'edit':'view');return}
     if(['+','=','-'].includes(e.key)){e.preventDefault();studioZoom(e.key==='-'?.9:1.1);return}
     const step=e.shiftKey?.5:.12,deltas={ArrowLeft:[-step,0],ArrowRight:[step,0],ArrowUp:[0,-step],ArrowDown:[0,step]};
     if(!Object.hasOwn(deltas,e.key))return;e.preventDefault();
-    const target=studio.items.find(p=>p.uid===studio.selected),p=target&&visibleStudioItem(target);
+    const target=studio.items.find(p=>p.uid===studio.selected),p=target;
     if(studio.mode==='edit'&&p){const [dx,dz]=deltas[e.key];void moveStudio(p.uid,{x:p.x+dx,z:p.z+dz})}
     else{
       const [dx,dy]=deltas[e.key];
       if(studio.mode==='photo'&&studio.pan){studio.panX=Math.max(-1,Math.min(1,studio.panX+dx/4));studio.panY=Math.max(-1,Math.min(1,studio.panY+dy/4))}
-      else{studio.angle-=dx;studio.pitch=clampStudioPitch(studio.pitch-dy)}
+      else{studio.angle-=dx;studio.pitch=clampStudioPitch(studio.pitch+dy)}
       scheduleStudio();
     }
   };
@@ -228,7 +201,7 @@ function initStudio(){
     const photo=document.createElement('canvas'),ratio=canvas.clientHeight/Math.max(1,canvas.clientWidth);
     photo.width=1920;photo.height=Math.max(1,Math.round(1920*ratio));
     const design=readDesign();
-    const frame=paintStudioScene(photo,{zone,items:studio.items.map(visibleStudioItem),scene:design.scene,weather:design.weather,angle:studio.angle,pitch:studio.pitch,panX:studio.panX,panY:studio.panY,zoom:studio.zoom,extent:studio.extent,selected:null});
+    const frame=paintStudioScene(photo,{zone,items:studio.items,scene:design.scene,weather:design.weather,angle:studio.angle,pitch:studio.pitch,panX:studio.panX,panY:studio.panY,zoom:studio.zoom,extent:studio.extent,selected:null});
     const layer=document.createElement('canvas');
     paintStudioWeather(layer,frame,zone,design.weather,matchMedia('(prefers-reduced-motion:reduce)').matches?0:performance.now()/1000);
     const ctx=photo.getContext('2d');ctx.resetTransform();ctx.drawImage(layer,0,0);

@@ -36,8 +36,9 @@ function localGarden(){
   return list;
 }
 function localDocument(){return GardenLayout.unpack(JSON.parse(localStorage.getItem(gardenKey)||'[]'))}
-function readDesign(){return visitingGarden?.design|| (gardenAccount.user?gardenAccount.design:localDocument().design)}
+function readDesign(){return visitingGarden?.design||activeStudioDraft()?.design|| (gardenAccount.user?gardenAccount.design:localDocument().design)}
 function readGarden(){
+  if(activeStudioDraft())return activeStudioDraft().records;
   if(gardenAccount.user)return structuredClone(gardenAccount.records);
   return gardenAccount.mode==='guest'?localGarden():[];
 }

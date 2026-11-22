@@ -21,6 +21,7 @@ function basicProfile(plant){
 function plantProfile(plant){
   return plant.model && Object.hasOwn(plantProfiles,plant.model.form)?plant.model:basicProfile(plant);
 }
+globalThis.plantProfile=plantProfile;
 const sillExamples=[
   {name:'雏菊',latin:'Bellis perennis',family:'菊科',note:'黄花心周围绕着一圈浅色的小花。'},
   {name:'薄荷',latin:'Mentha canadensis',family:'唇形科',note:'茎上成对生长的叶片，沿枝条向上舒展。'},
