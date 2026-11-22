@@ -5,10 +5,7 @@ function paintStudioWeather(canvas,frame,zone,weather,seconds){
   const ctx=canvas.getContext('2d');
   ctx.setTransform(ratio,0,0,ratio,0,0);ctx.clearRect(0,0,w,h);ctx.save();
   const indoor=studioIndoor(zone);
-  if(indoor){
-    if(!frame.weatherPath){ctx.restore();return}
-    ctx.clip(frame.weatherPath);
-  }
+  if(indoor&&!frame.windowMask){ctx.restore();return}
   if(weather==='sunny'&&frame.night){ctx.restore();return}
   if(weather==='sunny'){
     const y=indoor?h*.28:h*.15;
@@ -36,8 +33,8 @@ function paintStudioWeather(canvas,frame,zone,weather,seconds){
     }
   }
   if(indoor){
-    ctx.globalCompositeOperation='destination-out';
-    for(const {asset,x,y} of frame.layers)ctx.drawImage(asset.image,x,y,asset.w,asset.h);
+    ctx.globalCompositeOperation='destination-in';
+    ctx.resetTransform();ctx.drawImage(frame.windowMask,0,0);
   }
   ctx.restore();
 }

@@ -17,7 +17,7 @@ function drawStudioFrame(){
   const design=studio.design,drag=studio.drag;
   if(!design)return;
   const items=drag?.point?studio.items.map(p=>p.uid===drag.id?{...p,...drag.point}:p):studio.items;
-  studio.picker=paintStudioScene(canvas,{zone,items,turning:drag?.turning?drag.id:null,orbiting:drag?.moved&&!(studio.mode==='edit'&&drag.item)&&!drag.panning,scene:design.scene,weather:design.weather,angle:studio.angle,pitch:studio.pitch,panX:studio.panX,panY:studio.panY,zoom:studio.zoom,extent:studio.extent,selected:studio.mode==='edit'?studio.selected:null});
+  studio.picker=paintStudioScene(canvas,{zone,items,scene:design.scene,weather:design.weather,angle:studio.angle,pitch:studio.pitch,panX:studio.panX,panY:studio.panY,zoom:studio.zoom,extent:studio.extent,selected:studio.mode==='edit'?studio.selected:null});
   const handle=$('rotateHandle'),anchor=studio.picker.handle;
   handle.hidden=!anchor||studio.busy;
   if(anchor){

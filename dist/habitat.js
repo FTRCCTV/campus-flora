@@ -69,6 +69,8 @@ function drawHabitat({zone,scene,weather,extent,angle,face,box,pillar,ring,recta
         const z=-roomHalf+(i+.5)*roomHalf/4;
         box(left+.115,-.70,z,.04,1.18,.058,panel);
       }
+    }
+    {
       // Two timber wall shelves with seed packets, reference books and a vase.
       for(let j=0;j<2;j++){
         setLayer(5);
@@ -83,6 +85,8 @@ function drawHabitat({zone,scene,weather,extent,angle,face,box,pillar,ring,recta
         pillar(left+.27,y+.085,z+w*.28,.117,.117,.22,j?green:chalk,9,.77);
         pillar(left+.27,y+.30,z+w*.28,.064,.064,.09,j?green:chalk,9);
       }
+    }
+    if(sideVisible){
       // A pinned herbarium on the side wall, mounted with a cream paper mat.
       setLayer(5);
       const sx=left+.085,sz=roomHalf*.43;
@@ -95,9 +99,9 @@ function drawHabitat({zone,scene,weather,extent,angle,face,box,pillar,ring,recta
         face([[sx+.037,y,z],[sx+.037,y+.045,z+l],[sx+.037,y+.119,z+l*1.28],[sx+.037,y+.071,z+l*.29]],j%2?'#718367':'#82916e');
       }
     }
+    const win=Math.min(roomHalf*.47,1.79),bottom=.57,top=2.31,span=roomHalf-win;
     if(rearVisible){
       // Four wall sections surround a physically open, recessed window bay.
-      const win=Math.min(roomHalf*.47,1.79),bottom=.57,top=2.31,span=roomHalf-win;
       for(const sign of [-1,1]){
         setLayer(2);
         const x=sign*(win+span*.5);
@@ -159,8 +163,11 @@ function drawHabitat({zone,scene,weather,extent,angle,face,box,pillar,ring,recta
       // Gathered linen blind, herbarium plates and an apothecary cupboard.
       box(0,top+.038,paneZ+.07,2*win+.24,.095,.15,walnut);
       for(let j=0;j<3;j++)box(0,top-.03-j*.04,paneZ+.076,2*win+.07,.045,.065,j%2?chalk:['#bbab88','#c7b792','#cdbf9d','#ddd0ad']);
+    }
+    const cupboardX=(win+roomHalf)*.5;
+    {
       setLayer(5);
-      const cupboardX=(win+roomHalf)*.5,cw=Math.min(1.40,span*.83);
+      const cw=Math.min(1.40,span*.83);
       box(cupboardX,.03,back+.22,cw,.77,.45,panel);
       box(cupboardX,.78,back+.245,cw+.10,.07,.51,oak);
       for(let j=0;j<2;j++){
@@ -181,6 +188,8 @@ function drawHabitat({zone,scene,weather,extent,angle,face,box,pillar,ring,recta
         }
         face(rim,'#fcebc7',true);
       }
+    }
+    if(rearVisible){
       const fx=-cupboardX,w=Math.min(1.07,span*.72);
       box(fx,1.08,back+.13,w,1.02,.06,walnut);
       setLayer(6);

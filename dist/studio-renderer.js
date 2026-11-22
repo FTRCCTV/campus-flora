@@ -1,5 +1,3 @@
-// Rasterize each specimen once at the current camera angle. Translation on the
-// ground plane only changes its screen origin in this orthographic projection.
 const studioViewCaches=new WeakMap();
 function studioColorMix(color,target,amount){
   if(!/^#[0-9a-f]{6}$/i.test(color))return color;
@@ -34,36 +32,20 @@ function studioSurfaceFaces(meshes,view){
   }
   variants.set(mode,result);return result;
 }
-function studioSprite(item,view,projection,ratio,reusable){
+// Cache projected vertices for layout drags. Camera changes reproject the original mesh.
+function studioObjectFaces(item,view,projection,ratio){
   const {zone,weather}=view,rotation=item.rotation||0,ca=Math.cos(rotation),sa=Math.sin(rotation);
   const snowy=!studioIndoor(zone)&&weather==='snow',key=item.kind+'/'+snowy;
   if(item.kind&&!studioPropMeshes.has(key))studioPropMeshes.set(key,studioPropFaces(item.kind,snowy));
   const meshes=item.kind?studioPropMeshes.get(key):studioPlantAsset(item,zone).faces;
-  const [cx,cy]=projection.project([0,0,0]);
-  let left=Infinity,top=Infinity,right=-Infinity,bottom=-Infinity;
-  const size=item.kind?(item.scale??1):1;
-  const faces=studioSurfaceFaces(meshes,view).map(mesh=>{
+  const [cx,cy]=projection.project([0,0,0]),size=item.kind?(item.scale??1):1;
+  return studioSurfaceFaces(meshes,view).map(mesh=>{
     const p=mesh.vertices.map(([x,y,z])=>{
-      const [px,py,depth]=projection.project([(x*ca-z*sa)*size,y*size,(x*sa+z*ca)*size]);
-      const u=px-cx,v=py-cy;
-      left=Math.min(left,u);top=Math.min(top,v);right=Math.max(right,u);bottom=Math.max(bottom,v);
-      return [u,v,depth];
+      const [u,v,d]=projection.project([(x*ca-z*sa)*size,y*size,(x*sa+z*ca)*size]);
+      return [(u-cx)*ratio,(v-cy)*ratio,d+(mesh.overlay ? .004 : 0)];
     });
-    return {p,color:mesh.color,depth:p.reduce((sum,v)=>sum+v[2],0)/p.length+(mesh.overlay ? .004 : 0)};
+    return studioProjectedFace(p,mesh.color);
   });
-  left=Math.floor(left)-1;top=Math.floor(top)-1;
-  const w=Math.ceil(right-left)+2,h=Math.ceil(bottom-top)+2;
-  const image=reusable||document.createElement('canvas');
-  ratio=Math.min(ratio,2048/Math.max(1,w,h),Math.sqrt(2e6/Math.max(1,w*h)));
-  image.width=Math.ceil(w*ratio);image.height=Math.ceil(h*ratio);
-  const ctx=image.getContext('2d',{willReadFrequently:true});
-  ctx.setTransform(ratio,0,0,ratio,-left*ratio,-top*ratio);ctx.lineJoin='round';ctx.lineWidth=.32;
-  faces.sort((a,b)=>a.depth-b.depth);
-  for(const f of faces){
-    ctx.beginPath();for(let i=0;i<f.p.length;i++){const p=f.p[i];if(i)ctx.lineTo(p[0],p[1]);else ctx.moveTo(p[0],p[1])}
-    ctx.closePath();ctx.fillStyle=ctx.strokeStyle=f.color;ctx.fill();ctx.stroke();
-  }
-  return {image,ctx,left,top,ratio,w:image.width/ratio,h:image.height/ratio};
 }
 // Paint into the ground pass so soil cannot cover a neighbouring plant or intercept a pick.
 function paintPlantingBasin(ctx,projection,item,radius,weather,night){
@@ -100,43 +82,41 @@ function paintPlantingBasin(ctx,projection,item,radius,weather,night){
 }
 function paintStudioScene(canvas,view){
   const width=canvas.clientWidth||canvas.width,height=canvas.clientHeight||canvas.height;
-  const ratio=canvas.clientWidth?Math.min(view.orbiting?1:2,window.devicePixelRatio||1):1;
-  const pw=Math.round(width*ratio),ph=Math.round(height*ratio);
+  // Keep one sample grid for the entire gesture, including pointer release.
+  const ratio=Math.min(canvas.clientWidth?(window.devicePixelRatio||1):1,2,Math.sqrt(4e6/(width*height)));
+  const pw=Math.max(1,Math.round(width*ratio)),ph=Math.max(1,Math.round(height*ratio));
   if(canvas.width!==pw||canvas.height!==ph){canvas.width=pw;canvas.height=ph}
   const {zone,scene,weather,angle,zoom,extent,pitch=.53,panX=0,panY=0,items,selected}=view;
-  const spriteKey=[pw,ph,ratio,zone,scene,weather,angle,zoom,extent,pitch].join('|');
-  const key=[spriteKey,panX,panY].join('|');
+  const key=[width,height,ratio,zone,scene,weather,angle,zoom,extent,pitch,panX,panY].join('|');
   let cache=studioViewCaches.get(canvas);
-  if(cache?.key!==key){
-    const backdrop=cache?.backdrop||document.createElement('canvas');
-    if(backdrop.width!==pw||backdrop.height!==ph){backdrop.width=pw;backdrop.height=ph}
-    const projection=studioProjection(width,height,angle,zoom,extent,pitch,panX,panY);
-    const habitat=buildStudioBackdrop(backdrop,view,projection,ratio);
-    if(cache?.spriteKey===spriteKey)Object.assign(cache,{key,backdrop,projection,habitat});
-    else{
-      const spare=cache?[...cache.sprites.values()].map(a=>a.image):[];
-      cache={key,spriteKey,backdrop,projection,habitat,sprites:new Map(),pixels:0,spare};
-    }
+  if(!cache||cache.frame.width!==pw||cache.frame.height!==ph){
+    const backdrop=document.createElement('canvas'),overlay=document.createElement('canvas');
+    backdrop.width=overlay.width=pw;backdrop.height=overlay.height=ph;
+    const frame=studioRaster(pw,ph);
+    frame.owners=new Uint32Array(pw*ph);
+    cache={backdrop,overlay,frame,architecture:studioRaster(pw,ph)};
     studioViewCaches.set(canvas,cache);
   }
-  const {projection,habitat}=cache,ctx=canvas.getContext('2d');
-  ctx.setTransform(1,0,0,1,0,0);ctx.drawImage(cache.backdrop,0,0);ctx.setTransform(ratio,0,0,ratio,0,0);
-  const layers=[];let handle=null;
+  if(cache.key!==key){
+    cache.projection=studioProjection(width,height,angle,zoom,extent,pitch,panX,panY);
+    cache.habitat=buildStudioBackdrop(cache.backdrop,view,cache.projection,ratio,cache.architecture);
+    cache.objects=new Map();cache.key=key;
+  }
+  const {projection,habitat,frame}=cache,ctx=canvas.getContext('2d');
+  ctx.resetTransform();ctx.drawImage(cache.backdrop,0,0);ctx.setTransform(ratio,0,0,ratio,0,0);
+  frame.depth.set(cache.architecture.depth);frame.pixels.set(cache.architecture.pixels);frame.owners.fill(0);
+  const transparent=habitat.transparent.slice(),ids=[null],currentObjects=new Map();
+  let handle=null;
   for(const item of items){
     const [x,y,depth]=projection.project([item.x,0,item.z]),id=item.uid??item.id;
+    const owner=ids.push(id)-1;
     const assetKey=JSON.stringify([item.kind,item.latin,item.family,item.form,item.model,item.palette,item.size,item.rotation,item.scale,item.potStyle]);
-    let asset=cache.sprites.get(assetKey);
-    if(!asset&&view.turning===id){
-      asset=studioSprite(item,view,projection,ratio,cache.turnPreview);
-      cache.turnPreview=asset.image;asset.radius=studioFootprint(item,zone);
-    }else if(!asset){
-      asset=studioSprite(item,view,projection,ratio,cache.spare.pop());
-      const pixels=asset.image.width*asset.image.height;
-      while(cache.sprites.size&&cache.pixels+pixels>8e6){
-        const first=cache.sprites.keys().next().value,old=cache.sprites.get(first);
-        cache.pixels-=old.image.width*old.image.height;cache.sprites.delete(first);
-      }
-      asset.radius=studioFootprint(item,zone);cache.sprites.set(assetKey,asset);cache.pixels+=pixels;
+    let asset=currentObjects.get(assetKey)||cache.objects.get(assetKey);
+    if(!asset)asset={faces:studioObjectFaces(item,view,projection,ratio),radius:studioFootprint(item,zone)};
+    currentObjects.set(assetKey,asset);
+    for(const surface of asset.faces){
+      if((surface.color>>>24)===255)studioRasterFace(frame,surface,x*ratio,y*ratio,depth,owner);
+      else transparent.push({surface,dx:x*ratio,dy:y*ratio,dz:depth,id:owner,depth:depth+surface.depth});
     }
     const r=asset.radius*projection.scale;
     if(!item.kind&&!studioIndoor(zone))paintPlantingBasin(ctx,projection,item,asset.radius,weather,scene==='starlight');
@@ -146,22 +126,31 @@ function paintStudioScene(canvas,view){
       ctx.strokeStyle='#466b54';ctx.lineWidth=2;ctx.beginPath();ctx.ellipse(x,y,orbit,orbit*Math.sin(pitch),0,0,Math.PI*2);ctx.stroke();
       handle=[x+orbit*Math.cos(rotation+angle),y+orbit*Math.sin(rotation+angle)*Math.sin(pitch),rotation];
     }
-    layers.push({x:x+asset.left,y:y+asset.top,asset,id,depth});
   }
-  for(const unused of cache.spare){unused.width=unused.height=1}cache.spare.length=0;
-  layers.sort((a,b)=>a.depth-b.depth);
-  for(const {x,y,asset} of layers)ctx.drawImage(asset.image,x,y,asset.w,asset.h);
+  cache.objects=currentObjects;
+  transparent.sort((a,b)=>a.depth-b.depth);
+  for(const t of transparent)studioRasterFace(frame,t.surface,t.dx,t.dy,t.dz,t.id);
+  cache.overlay.getContext('2d').putImageData(frame.image,0,0);
+  ctx.resetTransform();ctx.drawImage(cache.overlay,0,0);
   function hit(px,py){
-    for(let i=layers.length-1;i>=0;i--){
-      const {asset,x,y,id}=layers[i],u=px-x,v=py-y;
-      if(u<0||v<0||u>=asset.w||v>=asset.h)continue;
-      if(asset.ctx.getImageData(Math.floor(u*asset.ratio),Math.floor(v*asset.ratio),1,1).data[3]>18)return id;
-    }
-    return null;
+    const x=Math.floor(px*ratio),y=Math.floor(py*ratio);
+    return x>=0&&y>=0&&x<pw&&y<ph?ids[frame.owners[y*pw+x]]:null;
+  }
+  // Clip indoor weather and window clicks to the same visible glass pixels.
+  let windowMask=null;
+  if(habitat.panes.length){
+    if(!cache.paneImage)cache.paneImage=new ImageData(pw,ph);
+    const pixels=new Uint32Array(cache.paneImage.data.buffer);
+    pixels.fill(0);
+    const mask={width:pw,height:ph,depth:frame.depth,pixels};
+    for(const pane of habitat.panes)studioRasterFace(mask,pane);
+    // The scene overlay has already been composited, and can now hold the mask.
+    cache.overlay.getContext('2d').putImageData(cache.paneImage,0,0);
+    windowMask=cache.overlay;
   }
   function windowHit(x,y){
-    if(!habitat.windowPath)return false;
-    ctx.save();ctx.resetTransform();const isWindow=ctx.isPointInPath(habitat.windowPath,x,y);ctx.restore();return isWindow;
+    const px=Math.floor(x*ratio),py=Math.floor(y*ratio);
+    return !!windowMask&&px>=0&&py>=0&&px<pw&&py<ph&&cache.paneImage.data[(py*pw+px)*4+3]>0;
   }
-  return {night:scene==='starlight',hit,handle,ground:projection.ground,windowHit,weatherPath:habitat.weatherPath,layers,width,height,ratio};
+  return {night:scene==='starlight',hit,handle,ground:projection.ground,windowHit,windowMask,width,height,ratio};
 }

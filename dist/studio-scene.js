@@ -139,7 +139,7 @@ function drawStudioStars(ctx,width,height,angle,weather,moonVisible){
   ctx.closePath();ctx.fill();
   ctx.restore();
 }
-function buildStudioBackdrop(canvas,view,projection,ratio){
+function buildStudioBackdrop(canvas,view,projection,ratio,architecture){
   const {scene,weather,zone,angle,extent}=view,width=canvas.width/ratio,height=canvas.height/ratio;
   const {project,edge}=projection,ctx=canvas.getContext('2d');
   const inside=studioIndoor(zone),terrace=scene==='terrace',court=scene==='courtyard';
@@ -182,22 +182,26 @@ function buildStudioBackdrop(canvas,view,projection,ratio){
     const p=f.vertices.map(project);
     return {p,layer:f.layer,color:f.color,depth:p.reduce((sum,v)=>sum+v[2],0)/p.length};
   });
-  projected.sort((a,b)=>a.layer-b.layer||a.depth-b.depth);
+  projected.sort((a,b)=>Number(b.layer===0)-Number(a.layer===0)||a.layer-b.layer||a.depth-b.depth);
   ctx.lineJoin='round';ctx.lineWidth=.32;
+  architecture.depth.fill(-Infinity);architecture.pixels.fill(0);
+  const transparent=[];
   for(const f of projected){
+    const ground=f.layer===0||f.layer===1||f.layer===1.5;
+    if(!ground||f.layer===0){
+      const surface=studioProjectedFace(f.p.map(([x,y,z])=>[x*ratio,y*ratio,z]),f.color);
+      if((surface.color>>>24)<255)transparent.push({surface,dx:0,dy:0,dz:0,id:0,depth:surface.depth});
+      else studioRasterFace(architecture,surface,0,0,0,0,ground);
+    }
+    if(!ground)continue;
     ctx.beginPath();f.p.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y));ctx.closePath();
     ctx.fillStyle=ctx.strokeStyle=f.color;ctx.fill();ctx.stroke();
   }
-  function projectPath(polygons){
-    if(!polygons)return null;
-    const path=new Path2D();
-    for(const poly of polygons){
-      poly.forEach((v,i)=>{const [x,y]=project(v);if(i)path.lineTo(x,y);else path.moveTo(x,y)});
-      path.closePath();
-    }
-    return path;
-  }
-  return {windowPath:projectPath(geometry.windowPath),weatherPath:projectPath(geometry.weatherPath)};
+  const panes=(geometry.weatherPath||[]).map(poly=>studioProjectedFace(poly.map(v=>{
+    const [x,y,z]=project(v);
+    return [x*ratio,y*ratio,z+.0001];
+  }),'#ffffff'));
+  return {transparent,panes};
 }
 
 const studioWorldGeometry=new Map();
