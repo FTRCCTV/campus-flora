@@ -35,6 +35,18 @@ test('quarter-turn rotates pillars into the former opening',()=>{
   pair(arch,prop('rock',1.78,-1,.5),true);
 });
 
+test('plant and prop headings round-trip at arbitrary angles and reject invalid values',()=>{
+  const mint={...plant('Mentha canadensis','herb'),rotation:1.037};
+  const design={...layout.empty(),decorations:[prop('arch',3,0,1,.471)]};
+  assert.ok(layout.valid([mint],design));
+  const saved=layout.unpack(JSON.parse(JSON.stringify({records:[mint],design})));
+  assert.equal(saved.records[0].rotation,mint.rotation);
+  assert.equal(saved.design.decorations[0].rotation,.471);
+  for(const rotation of ['45',NaN,Infinity,2*Math.PI+.01]){
+    assert.equal(layout.valid([{...mint,rotation}],design),false);
+  }
+});
+
 test('leg, seat and shelf clearances depend on the height and scale of both models',()=>{
   const smallRock=prop('rock',0,0,.5),lowStones=prop('steppingstones',0,0,.5);
   pair(prop('bench'),smallRock,true);

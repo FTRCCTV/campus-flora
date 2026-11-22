@@ -234,3 +234,11 @@ dialog:not(#bookIntro)::backdrop { background: #192d25a8; }
 @media(prefers-reduced-motion:reduce) {
   #bookIntro[open], .intro-book, .book-lid, .turning-sheet { animation:none; }
 }
+#rotateHandle {
+  position: absolute; z-index: 3; transform: translate(-50%,-50%);
+  width: 42px; height: 42px; display: grid; place-items: center;
+  border: 7px solid transparent; padding: 0; border-radius: 50%;
+  background: #315741 padding-box; color: #fff9e6; line-height: 1;
+  font-size: 23px; cursor: grab; touch-action: none; user-select: none;
+}
+#rotateHandle:active { cursor: grabbing; }

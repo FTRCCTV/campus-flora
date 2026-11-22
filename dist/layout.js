@@ -193,7 +193,7 @@ const GardenLayout=(()=>{
       else if(![p.x,p.z].every(v=>Number.isFinite(v)&&Math.abs(v)<=160))return false;
       if(decor&&p.scale!==undefined&&(!Number.isFinite(p.scale)||p.scale<.5||p.scale>2))return false;
       if(!decor&&p.potStyle!==undefined&&!['clay','celadon','basalt'].includes(p.potStyle))return false;
-      if(decor&&p.rotation!==undefined&&(!Number.isFinite(p.rotation)||Math.abs(p.rotation)>Math.PI*2))return false;
+      if(p.rotation!==undefined&&(!Number.isFinite(p.rotation)||Math.abs(p.rotation)>Math.PI*2))return false;
       const positioned=located(p);
       if(!clear(positioned,prior))return false;
       ids.add(p.uid);prior.push(positioned);

@@ -65,6 +65,39 @@ function studioSprite(item,view,projection,ratio,reusable){
   }
   return {image,ctx,left,top,ratio,w:image.width/ratio,h:image.height/ratio};
 }
+// Paint into the ground pass so soil cannot cover a neighbouring plant or intercept a pick.
+function paintPlantingBasin(ctx,projection,item,radius,weather,night){
+  let seed=0;
+  for(const c of String(item.uid||item.latin))seed=(seed*31+c.charCodeAt(0))>>>0;
+  const phase=(seed%180)*Math.PI/90,segments=18;
+  const size={small:.24,medium:.36,large:.53}[item.size]||.36;
+  const r=Math.max(size,Math.min(size*1.65,radius*.78));
+  const colors=weather==='snow'?['#c5c8ba','#908478','#625646','#807061']:
+    weather==='rain'?['#665648','#4a3e32','#392f26','#584634']:['#ab8862','#8b6b49','#604a33','#755a3d'];
+  const ink=colors.map(c=>night?studioColorMix(c,'#263d62',.42):c);
+  function screen(x,h,z){return projection.project([item.x+x*r,h*r,item.z+z*r])}
+  function fill(points,color){
+    ctx.beginPath();ctx.moveTo(points[0][0],points[0][1]);
+    for(let i=1;i<points.length;i++)ctx.lineTo(points[i][0],points[i][1]);
+    ctx.closePath();ctx.fillStyle=color;ctx.fill();
+  }
+  const rim=[],lip=[],bed=[];
+  for(let i=0;i<segments;i++){
+    const a=i*2*Math.PI/segments,edge=1+.07*Math.sin(3*a+phase)+.04*Math.sin(7*a-phase);
+    const x=Math.cos(a)*edge,z=Math.sin(a)*edge*.89;
+    rim.push(screen(x,0,z));lip.push(screen(x*.85,.065,z*.85));bed.push(screen(x*.66,0,z*.66));
+  }
+  fill(rim,ink[1]);
+  for(let i=0;i<segments;i++){
+    const j=(i+1)%segments;
+    fill([rim[i],rim[j],lip[j],lip[i]],i%5<3?ink[0]:ink[1]);
+  }
+  fill(lip,ink[2]);fill(bed,ink[3]);
+  for(let i=0;i<9;i++){
+    const a=phase+i*2.4,s=.26+.32*((i*7)%9)/9,x=s*Math.cos(a),z=s*Math.sin(a);
+    fill([screen(x-.043,.016,z),screen(x,.035,z-.045),screen(x+.06,.012,z+.03)],i%3?ink[1]:ink[2]);
+  }
+}
 function paintStudioScene(canvas,view){
   const width=canvas.clientWidth||canvas.width,height=canvas.clientHeight||canvas.height;
   const ratio=canvas.clientWidth?Math.min(view.orbiting?1:2,window.devicePixelRatio||1):1;
@@ -88,12 +121,15 @@ function paintStudioScene(canvas,view){
   }
   const {projection,habitat}=cache,ctx=canvas.getContext('2d');
   ctx.setTransform(1,0,0,1,0,0);ctx.drawImage(cache.backdrop,0,0);ctx.setTransform(ratio,0,0,ratio,0,0);
-  const layers=[];
+  const layers=[];let handle=null;
   for(const item of items){
     const [x,y,depth]=projection.project([item.x,0,item.z]),id=item.uid??item.id;
     const assetKey=JSON.stringify([item.kind,item.latin,item.family,item.form,item.model,item.palette,item.size,item.rotation,item.scale,item.potStyle]);
     let asset=cache.sprites.get(assetKey);
-    if(!asset){
+    if(!asset&&view.turning===id){
+      asset=studioSprite(item,view,projection,ratio,cache.turnPreview);
+      cache.turnPreview=asset.image;asset.radius=studioFootprint(item,zone);
+    }else if(!asset){
       asset=studioSprite(item,view,projection,ratio,cache.spare.pop());
       const pixels=asset.image.width*asset.image.height;
       while(cache.sprites.size&&cache.pixels+pixels>8e6){
@@ -103,8 +139,13 @@ function paintStudioScene(canvas,view){
       asset.radius=studioFootprint(item,zone);cache.sprites.set(assetKey,asset);cache.pixels+=pixels;
     }
     const r=asset.radius*projection.scale;
+    if(!item.kind&&!studioIndoor(zone))paintPlantingBasin(ctx,projection,item,asset.radius,weather,scene==='starlight');
     ctx.fillStyle='#3549322d';ctx.beginPath();ctx.ellipse(x+1,y+1,r*.96,Math.max(.6,r*.85*Math.sin(pitch)),0,0,Math.PI*2);ctx.fill();
-    if(selected===id){ctx.strokeStyle='#466b54';ctx.lineWidth=Math.max(1.5,projection.scale*.055);ctx.beginPath();ctx.ellipse(x,y,r+3,(r+3)*Math.sin(pitch),0,0,Math.PI*2);ctx.stroke()}
+    if(selected===id){
+      const orbit=Math.max(r+12,38),rotation=item.rotation||0;
+      ctx.strokeStyle='#466b54';ctx.lineWidth=2;ctx.beginPath();ctx.ellipse(x,y,orbit,orbit*Math.sin(pitch),0,0,Math.PI*2);ctx.stroke();
+      handle=[x+orbit*Math.cos(rotation+angle),y+orbit*Math.sin(rotation+angle)*Math.sin(pitch),rotation];
+    }
     layers.push({x:x+asset.left,y:y+asset.top,asset,id,depth});
   }
   for(const unused of cache.spare){unused.width=unused.height=1}cache.spare.length=0;
@@ -122,5 +163,5 @@ function paintStudioScene(canvas,view){
     if(!habitat.windowPath)return false;
     ctx.save();ctx.resetTransform();const isWindow=ctx.isPointInPath(habitat.windowPath,x,y);ctx.restore();return isWindow;
   }
-  return {night:scene==='starlight',hit,ground:projection.ground,windowHit,weatherPath:habitat.weatherPath,layers,width,height,ratio};
+  return {night:scene==='starlight',hit,handle,ground:projection.ground,windowHit,weatherPath:habitat.weatherPath,layers,width,height,ratio};
 }
