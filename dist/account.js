@@ -1,14 +1,16 @@
 const fileDemo=location.protocol==='file:';
-const gardenAccount={mode:fileDemo?'guest':'loading',user:null,records:[],design:GardenLayout.empty(),version:'new'};
+const localEdition=!!document.querySelector('meta[name="flora-local-edition"]');
+const localGardenOnly=fileDemo||localEdition;
+const gardenAccount={mode:localGardenOnly?'guest':'loading',user:null,records:[],design:GardenLayout.empty(),version:'new'};
 let sessionEpoch=0, saveBusy=false;
 const accountButton=document.getElementById('account');
 
 function setAccountButton(){
-  accountButton.textContent=gardenAccount.user?'我的账号':({loading:'连接中',failed:'重连账号',guest:fileDemo?'离线模式':'登录 / 注册'})[gardenAccount.mode];
+  accountButton.textContent=gardenAccount.user?'我的账号':({loading:'连接中',failed:'重连账号',guest:fileDemo?'离线模式':localEdition?'本机花园':'登录 / 注册'})[gardenAccount.mode];
   accountButton.disabled=gardenAccount.mode==='loading';
 }
 async function refreshAccount({silent=false}={}){
-  if(fileDemo||saveBusy)return;
+  if(localGardenOnly||saveBusy)return;
   const epoch=++sessionEpoch,previous=gardenAccount.user?.id;
   try{
     const res=await fetch('/api/account',{credentials:'same-origin',cache:'no-store',signal:AbortSignal.timeout(15000)});
@@ -92,8 +94,8 @@ function accountPanel(){
   const {mode,user}=gardenAccount;
   if(mode==='failed'){refreshAccount();return}
   if(mode!=='member'){
-    if(!fileDemo){loginPanel();return}
-    show('<div class="body accountPanel"><h2>本机花园</h2><p>离线版将手记保存在当前浏览器。在线版支持账号登录与云端花园。</p><a class="primary" target="_top" href="'+hosted+'">打开在线版</a><button class="light" id="stayLocal">继续本机体验</button></div>');
+    if(!localGardenOnly){loginPanel();return}
+    show('<div class="body accountPanel"><h2>本机花园</h2><p>观察手记保存在当前浏览器。在线版支持账号登录与云端花园。</p><a class="primary" target="_top" href="'+hosted+'">打开在线版</a><button class="light" id="stayLocal">继续本机体验</button></div>');
     $('stayLocal').onclick=()=>modal.close();return;
   }
   let guest=[];try{guest=localGarden()}catch{}

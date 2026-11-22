@@ -280,7 +280,7 @@ for(const input of [$('cam'),$('file')])input.onchange=async()=>{
   const context=input.plantContext||{};input.plantContext=null;const file=input.files[0];input.value='';if(!file)return;
   try{const item=await prepare(file);
     if(location.protocol==='file:'){preview(item.photo,'在线识别植物','<p>离线版支持种植图鉴示例。拍照识别请打开在线版并选择照片。</p><a href="'+hosted+'">打开在线版</a>');return}
-    preview(item.photo,'识别这株植物','<p>将这张照片发送至 Pl@ntNet，获取候选物种。</p><button class="primary" id="identify">开始识别</button>');$('identify').onclick=()=>identifyPhoto(item,context);
+    preview(item.photo,'识别这株植物','<p>将这张照片经植迹在线服务发送至 Pl@ntNet，获取候选物种。</p><button class="primary" id="identify">开始识别</button>');$('identify').onclick=()=>identifyPhoto(item,context);
   }catch{show('<div class="body"><h2>照片读取失败</h2><p>请尝试 JPG、PNG 或 WebP 格式。</p></div>')}
 };
-initStudio();window.addEventListener('hashchange',route);setAccountButton();route();if(!fileDemo)void refreshAccount();
+initStudio();window.addEventListener('hashchange',route);setAccountButton();route();if(!localGardenOnly)void refreshAccount();
