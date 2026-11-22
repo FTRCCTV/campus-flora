@@ -60,3 +60,5 @@
 @media(max-width:600px){.studioActions{margin-left:0}.studioBar{gap:8px}.studioBar select{min-width:90px}}
 .studioStage #studioWeather{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1;transform:none;transition:none}
 .studioStage .cameraControls,.studioStage .scene-controls,.studioStage .scene-title{z-index:2}
+
+.traitChips{display:flex;flex-wrap:wrap;gap:6px;margin:.55rem 0 .2rem}.traitChips span{padding:3px 10px;border-radius:999px;background:#fffef8;border:1px solid #cfd9c1;color:#3b5640;font-size:12.5px;line-height:1.5;white-space:nowrap}.traitChips .traitSource{background:#2f5540;border-color:#2f5540;color:#f4f7e9;font-weight:600}

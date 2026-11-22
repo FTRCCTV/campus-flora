@@ -14,9 +14,15 @@ function cachedModel(latin){
   if(saved)return saved.model;
   try{return JSON.parse(localStorage.getItem(k))}catch{return null}
 }
+// Curated campus species carry hand-checked traits and need no generated model.
+const curatedSpecies=latin=>FloraCatalog.lookup(latin)?.level==='species';
+function traitChips(plant){
+  const profile=plantProfile({...plant,model:cachedModel(plant.latin)||plant.model});
+  return '<span class="traitSource">'+esc(FloraCatalog.sources[profile.source])+'</span>'+FloraCatalog.labels(profile).map(t=>'<span>'+esc(t)+'</span>').join('');
+}
 async function refinePlant(r){
   const k=profileKey(r.latin);
-  if(cachedModel(r.latin))return true;
+  if(cachedModel(r.latin)||curatedSpecies(r.latin))return true;
   if(location.protocol==='file:')return false;
   if(inFlight.has(k))return inFlight.get(k);
   const job=(async()=>{
@@ -97,7 +103,7 @@ function route(){
 }
 window.addEventListener('storage',e=>{if(e.key===gardenKey||e.key===null)route()});
 function detail(r){
-  show('<img class="detailArt" alt="观察记录"><div class="body"><div class="eyebrow">'+(r.gift?'花友分株':r.demo?'图鉴示例':'校园观察')+'</div><h2>'+esc(r.name)+'</h2><i>'+esc(r.latin)+'</i><p>'+esc(r.family||'')+'</p><h3>植物小科普</h3><p id="detailFact">'+esc(plantFact(r))+'</p><div class="recinfo">'+esc(r.date)+' · '+esc(r.location||'未填写发现地点')+'</div><p>'+esc(placementName(r))+' · '+sizes[r.size]+' · '+habits[r.form]+'</p><div class="management"><button id="move">调整体型与位置</button><button id="replace">替换植物</button><button class="danger" id="remove">移除</button></div><p class="modelnote" id="modelStatus"></p></div>');
+  show('<img class="detailArt" alt="观察记录"><div class="body"><div class="eyebrow">'+(r.gift?'花友分株':r.demo?'图鉴示例':'校园观察')+'</div><h2>'+esc(r.name)+'</h2><i>'+esc(r.latin)+'</i><p>'+esc(r.family||'')+'</p><h3>植物小科普</h3><p id="detailFact">'+esc(plantFact(r))+'</p><div class="traitChips" id="detailTraits">'+traitChips(r)+'</div><div class="recinfo">'+esc(r.date)+' · '+esc(r.location||'未填写发现地点')+'</div><p>'+esc(placementName(r))+' · '+sizes[r.size]+' · '+habits[r.form]+'</p><div class="management"><button id="move">调整体型与位置</button><button id="replace">替换植物</button><button class="danger" id="remove">移除</button></div><p class="modelnote" id="modelStatus"></p></div>');
   body.querySelector('img').src=r.photo;
   $('move').onclick=()=>plantEditor([r],r.photo,r.demo,{editUid:r.uid,previous:r});
   $('replace').onclick=()=>library({replaceUid:r.uid,previous:r,zone:r.zone});
@@ -107,10 +113,10 @@ function detail(r){
       try{changeStudioDraft(list=>{const i=list.findIndex(x=>x.uid===r.uid);if(i<0)throw Error('这条记录已移除。');list.splice(i,1)});modal.close();location.hash='garden';setStudioMode('edit');route();toast('已从本地布置移除，保存后生效。')}catch(e){$('feedback').textContent=e.message}
     };
   };
-  const status=$('modelStatus'),k=profileKey(r.latin);status.textContent=cachedModel(r.latin)?'已应用物种模型':modelErrors.get(k)||'当前显示基础模型';
-  if(!cachedModel(r.latin)&&location.protocol!=='file:'){
+  const status=$('modelStatus'),k=profileKey(r.latin);status.textContent=curatedSpecies(r.latin)?'已应用校园图鉴株形':cachedModel(r.latin)?'已应用物种模型':modelErrors.get(k)||'当前显示基础模型';
+  if(!cachedModel(r.latin)&&!curatedSpecies(r.latin)&&location.protocol!=='file:'){
     const b=document.createElement('button');b.className='light';b.textContent='细化物种特征';status.after(b);
-    b.onclick=async()=>{b.disabled=true;status.classList.add('modelPending');status.textContent='正在细化叶序和花序…';const ok=await refinePlant(r);status.classList.remove('modelPending');if(ok&&status.isConnected)$('detailFact').textContent=plantFact(r);status.textContent=ok?'已应用物种模型':modelErrors.get(k)||'暂时无法生成，请稍后重试。';b.hidden=!!ok;b.disabled=false};
+    b.onclick=async()=>{b.disabled=true;status.classList.add('modelPending');status.textContent='正在细化叶序和花序…';const ok=await refinePlant(r);status.classList.remove('modelPending');if(ok&&status.isConnected){$('detailFact').textContent=plantFact(r);$('detailTraits').innerHTML=traitChips(r)}status.textContent=ok?'已应用物种模型':modelErrors.get(k)||'暂时无法生成，请稍后重试。';b.hidden=!!ok;b.disabled=false};
   }
 }
 function fillSelect(id,values,selected,placeholder){
@@ -156,14 +162,15 @@ function schedulePaletteUpgrade(){
 }
 function plantFact(plant){
   const model=cachedModel(plant.latin)||plant.model;
-  const entry=samples.find(s=>s.latin===plant.latin||s.latin.startsWith(plant.latin+' '));
+  const entry=samples.find(s=>s.latin===plant.latin||s.latin.startsWith(plant.latin+' ')),curated=FloraCatalog.lookup(plant.latin);
+  if(curated?.level==='species')return curated.fact;
   if(model?.fact)return model.fact;
   if(entry?.note)return entry.note;
   return (plant.family?'这个候选物种属于 '+plant.family+'。':'候选学名为 '+plant.latin+'。')+'可以对照照片观察叶片在茎上是成对生长，还是左右交错。';
 }
 function plantEditor(options,photo,demo,context={}){
   const prev=context.previous,editing=!!context.editUid,replacing=!!context.replaceUid;
-  show('<div class="body"><div class="eyebrow">PLANTING DESK</div><h2>'+(editing?'调整植株':replacing?'确认替换':'种植工作台')+'</h2><div class="pot-choice"><canvas id="previewPlant"></canvas><div><label>植物名称<select id="species"></select></label><i id="taxonomy"></i></div></div><section class="plantFact"><strong>植物小科普</strong><p id="speciesFact"></p><p id="profileProgress" role="status" hidden></p></section><label>展示大小<select id="size"></select></label><label>种植区域<select id="bed"></select></label><label>发现地点（选填）<input id="place" maxlength="60"></label><p id="actionNote"></p><button class="primary" id="save">确定</button><p id="feedback" class="error" role="status"></p></div>');
+  show('<div class="body"><div class="eyebrow">PLANTING DESK</div><h2>'+(editing?'调整植株':replacing?'确认替换':'种植工作台')+'</h2><div class="pot-choice"><canvas id="previewPlant"></canvas><div><label>植物名称<select id="species"></select></label><i id="taxonomy"></i></div></div><section class="plantFact"><strong>植物小科普</strong><p id="speciesFact"></p><div class="traitChips" id="speciesTraits"></div><p id="profileProgress" role="status" hidden></p></section><label>展示大小<select id="size"></select></label><label>种植区域<select id="bed"></select></label><label>发现地点（选填）<input id="place" maxlength="60"></label><p id="actionNote"></p><button class="primary" id="save">确定</button><p id="feedback" class="error" role="status"></p></div>');
   options.forEach((r,i)=>$('species').add(new Option(r.name+(Number.isFinite(r.score)?' · '+(100*r.score).toFixed(1)+'%':''),i)));
   fillSelect('size',sizes,prev?.size,'请选择体型');
   fillSelect('bed',Object.fromEntries(Object.entries(places).map(([k,v])=>[k,v.name])),context.zone||prev?.zone||zone,'请选择区域');
@@ -178,7 +185,7 @@ function plantEditor(options,photo,demo,context={}){
     return swatches.get(form);
   }
   function updatePreview(){
-    const p=options[Number($('species').value)];$('taxonomy').textContent=p.latin;
+    const p=options[Number($('species').value)];$('taxonomy').textContent=p.latin;$('speciesTraits').innerHTML=traitChips(p);
     const c=$('previewPlant');
     if($('size').value){paintPot(c,{...p,palette,model:cachedModel(p.latin)||p.model,size:$('size').value})}
     else{c.width=180;c.height=200;const g=c.getContext('2d');g.fillStyle='#52674e';g.font='16px sans-serif';g.textAlign='center';g.fillText('选好体型后预览',90,105)}
@@ -194,7 +201,7 @@ function plantEditor(options,photo,demo,context={}){
     const progress=$('profileProgress'),fact=$('speciesFact');
     fact.textContent=plantFact(selected);
     progress.hidden=true;progress.classList.remove('modelPending');
-    if(demo||fileDemo||cachedModel(selected.latin))return;
+    if(demo||fileDemo||cachedModel(selected.latin)||curatedSpecies(selected.latin))return;
     progress.hidden=false;progress.classList.add('modelPending');progress.textContent='正在细化叶形、叶序和花序…';
     previewTimer=setTimeout(async()=>{
       if(!speciesPicker.isConnected||!modal.open)return;
@@ -222,7 +229,8 @@ function plantEditor(options,photo,demo,context={}){
         const data={form,size,zone:selected,location:locationText};
         if(photoPalette)data.palette=photoPalette;
         const previous=index>=0?GardenLayout.located(list[index]):null;
-        Object.assign(data,GardenLayout.place(data,list.filter(r=>r.uid!==originalUid).concat(design.decorations),previous?.zone===selected?previous:null));
+        const specimen={...(editing?previous:{}),...p,...data,model:cachedModel(p.latin)||p.model};
+        Object.assign(data,GardenLayout.place(specimen,list.filter(r=>r.uid!==originalUid).concat(design.decorations),previous?.zone===selected?previous:null));
         if(editing){Object.assign(list[index],data);return}
         const record={...data,uid:plantedId,name:p.name,latin:p.latin,family:p.family,note:p.note,photo,demo,date:new Date().toLocaleDateString('zh-CN'),model:cachedModel(p.latin)};
         if(replacing)list.splice(index,1,record);else list.unshift(record);
@@ -264,7 +272,7 @@ async function identifyPhoto(item,context={}){
     }
     if(!response.ok)throw Error(data.error||'识别服务暂时不可用。');
     if(!data.results.length){preview(item.photo,'未找到匹配植物','<p>请靠近一朵花或一片完整的叶子重新拍摄。</p><button class="light" id="again">换张照片</button>');$('again').onclick=()=>guide(context);return}
-    const options=data.results.map(r=>{const known=samples.find(p=>p.latin.startsWith(r.latin+' ')||p.latin===r.latin);return {...r,name:known?.name||r.name,note:known?.note}});
+    const options=data.results.map(r=>{const known=samples.find(p=>p.latin.startsWith(r.latin+' ')||p.latin===r.latin);return {...r,name:known?.name||FloraCatalog.name(r.latin)||r.name,note:known?.note}});
     plantEditor(options,item.photo,false,context);
   }catch(e){if(controller.signal.aborted)return;preview(item.photo,'这次识别未完成','<p>'+esc(e.message)+'</p><button class="light" id="retry">重新识别</button>');$('retry').onclick=()=>identifyPhoto(item,context)}
 }

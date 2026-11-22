@@ -104,7 +104,8 @@ const GardenLayout=(()=>{
     const indoor=(legacyZones[item.zone]||item.zone)==='sill',model=item.model||{};
     const key=JSON.stringify([indoor,item.size,item.potStyle,item.latin,item.family,item.form,model.form,
       model.count,model.height,model.spread,model.leafShape,model.crownShape,model.petals,
-      model.arrangement,model.inflorescence,model.margin,model.leafAspect]);
+      model.arrangement,model.inflorescence,model.margin,model.leafAspect,model.habit,
+      model.leafCompound,model.leaflets,model.flowerShape,model.bloomLoad,model.fruit]);
     if(plantParts.has(key))return plantParts.get(key);
     if(!specimenMeshFactory){
       const heights=indoor?{small:1.248,medium:1.608,large:2.008}:{small:1.05,medium:1.72,large:2.4};
