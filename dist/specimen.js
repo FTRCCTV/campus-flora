@@ -591,9 +591,13 @@ function specimenMesh(record, potted=false) {
   let radius=0,high=0,low=0;
   for(const f of faces)for(const [x,y,z] of f.vertices){radius=Math.max(radius,Math.hypot(x,z));high=Math.max(high,y);low=Math.min(low,y)}
   const chosen=specimenScales[record.size]||specimenScales.medium;
-  const scale=(potted?chosen.pot:chosen.ground)/Math.max(.1,high-low,radius*1.65);
+  const growthScale=record.growth===0?.44:record.growth===1?.72:1;
+  const scale=growthScale*(potted?chosen.pot:chosen.ground)/Math.max(.1,high-low,radius*1.65);
   const soil=potted?.578:0;
   for(const f of faces)f.vertices=f.vertices.map(([x,y,z])=>[x*scale,(y-low)*scale+soil,z*scale]);
+  if(record.growth===0||record.growth===1){
+    for(let i=faces.length-1;i>=0;i--)if(faces[i].surface==='bloom')faces.splice(i,1);
+  }
   if(potted){
     const celadon=record.potStyle==='celadon',stone=record.potStyle==='basalt',sides=celadon?32:stone?10:20;
     const profile=celadon?[[0,.248],[.044,.248],[.058,.28],[.16,.348],[.399,.423],[.516,.429],[.549,.453],[.604,.443],[.604,.399],[.578,.393]]:

@@ -251,3 +251,18 @@ dialog:not(#bookIntro)::backdrop { background: #192d25a8; }
 .rewardShelf canvas{width:100%;height:66px;object-fit:contain;background:#f0ead9;border-radius:3px}.rewardShelf canvas.nightSwatch{background:#344643}
 .rewardShelf .locked canvas{filter:saturate(.55)}.rewardShelf .smallBtn{padding:.35rem .5rem;margin:0}.rewardShelf .smallBtn:disabled{opacity:1;color:#6d695b;background:#eee9dc;border-color:#d7cfbd;cursor:default}
 @media(max-width:600px){.rewardBook progress{width:4rem}.rewardBook #nextReward{display:block}.rewardShelf{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+.nurseryPanel{padding:14px 16px;margin:14px 0;background:#f3f1df;border:1px solid #c4c5a5;border-radius:8px}
+.nurseryHeading{display:flex;align-items:baseline;justify-content:space-between;gap:.5rem}.nurseryHeading h3{margin:0}.nurseryHeading span,.seedRow small{font-size:.85rem;color:#52654d}
+.carePortrait{display:block;width:100%;height:110px;object-fit:contain}.growthTrack{display:flex;flex-wrap:wrap;gap:4px}.growthTrack span{padding:.18rem .45rem;border-bottom:3px solid #dddaca;color:#69695e;font-size:.82rem}.growthTrack .reached{border-color:#90a17b;color:#395340}.growthTrack [aria-current]{font-weight:bold;background:#e0e6ce}
+.careStatus:empty,#seedStatus:empty{display:none}.seedRow{display:flex;align-items:center;gap:.55rem;flex-wrap:wrap;padding:.6rem 0;border-bottom:1px solid #ccc7b4}.seedRow canvas{width:52px;height:60px;object-fit:contain}.seedRow div{flex:1;min-width:95px}.seedRow small{display:block}.seedRow select{width:auto}
+.pageAtmosphere{display:none;position:fixed;inset:0;pointer-events:none;z-index:9;overflow:hidden}
+body:is([data-atmosphere="prism"],[data-atmosphere="meteors"],[data-atmosphere="aurora"]) .pageAtmosphere{display:block}
+.pageAtmosphere:before,.pageAtmosphere:after{content:"";position:absolute;inset:0;pointer-events:none}
+body[data-atmosphere="prism"] .pageAtmosphere:before{background:linear-gradient(115deg,#db989731,transparent 10%,transparent 88%,#9bd1c338 97%,#e7c87e42);animation:floraPageLight 9s ease-in-out infinite alternate}
+body[data-atmosphere="meteors"] .pageAtmosphere:after,body[data-atmosphere="aurora"] .pageAtmosphere:after{background:radial-gradient(circle at 2% 11%,#d7bb75 0 1.5px,transparent 3px),radial-gradient(circle at 97% 32%,#b3bd88 0 2px,transparent 4px),radial-gradient(circle at 5% 78%,#d1ae71 0 1px,transparent 3px);background-size:100% 37%;animation:floraPageLight 5s ease-in-out infinite alternate}
+body[data-atmosphere="aurora"] .pageAtmosphere:before{background:radial-gradient(ellipse at top left,#65ceaa55,transparent 24%),radial-gradient(ellipse at right bottom,#af9ed44f,transparent 22%);animation:floraPageLight 7s ease-in-out infinite alternate}
+body[data-atmosphere="meteors"] .pageAtmosphere:before{inset:5% auto auto 91%;width:54px;height:2px;background:linear-gradient(90deg,#f7d799,transparent);transform:rotate(-32deg);animation:floraPageMeteor 7s ease-out infinite}
+@keyframes floraPageMeteor{0%,62%{opacity:0;translate:0 0}65%{opacity:.8}76%,100%{opacity:0;translate:-85px 55px}}
+@keyframes floraPageLight{from{opacity:.42}to{opacity:1}}
+@media(prefers-reduced-motion:reduce){.pageAtmosphere:before,.pageAtmosphere:after{animation:none!important}}

@@ -15,6 +15,10 @@ function rewardIllustration(canvas,reward){
     }
     return;
   }
+  if(['butterflies','prism','meteors','aurora'].includes(reward.id)){
+    ctx.fillStyle=['meteors','aurora'].includes(reward.id)?'#293951':'#ede7d7';ctx.fillRect(0,0,176,104);
+    paintRareEffect(ctx,reward.id,176,104,1.2);return;
+  }
   const fire=reward.id==='fireflies';
   for(let i=0;i<12;i++){
     const x=31+(i*43%118),y=17+(i*29%70),s=2+i%4;

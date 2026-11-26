@@ -4,7 +4,7 @@ const studioPlantMeshes=new Map();
 function studioIndoor(zone){return ['sill','bench','shelf'].includes(zone)}
 function studioPlantAsset(item,zone){
   const indoor=studioIndoor(zone);
-  const key=JSON.stringify([indoor,item.latin,item.family,item.size,item.form,item.model,item.palette,item.potStyle]);
+  const key=JSON.stringify([indoor,item.growth,item.latin,item.family,item.size,item.form,item.model,item.palette,item.potStyle]);
   if(studioPlantMeshes.has(key))return studioPlantMeshes.get(key);
   const faces=specimenMesh(item,indoor);
   let radius=0;

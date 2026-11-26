@@ -1,6 +1,10 @@
 // Weather has a transparent surface so raindrops never trigger a mesh redraw.
 function paintStudioWeather(canvas,frame,zone,weather,seconds,effect='none'){
   paintStudioClimate(canvas,frame,zone,weather,seconds);
+  if(['butterflies','prism','meteors','aurora'].includes(effect)){
+    const ctx=canvas.getContext('2d');ctx.save();ctx.setTransform(frame.ratio,0,0,frame.ratio,0,0);
+    paintRareEffect(ctx,effect,frame.width,frame.height,seconds);ctx.restore();return;
+  }
   if(effect!=='petals'&&effect!=='fireflies')return;
   const ctx=canvas.getContext('2d'),{width:w,height:h,ratio}=frame;
   ctx.save();ctx.setTransform(ratio,0,0,ratio,0,0);
@@ -22,6 +26,60 @@ function paintStudioWeather(canvas,frame,zone,weather,seconds,effect='none'){
     ctx.restore();
   }
   ctx.restore();
+}
+// All paths are deterministic at a given time, including still photos and reduced motion.
+function paintRareEffect(ctx,effect,w,h,t){
+  if(effect==='butterflies'){
+    for(let i=0;i<6;i++){
+      const phase=i*2.4,unit=Math.min(w,h)*.015;
+      const x=w*(.07+.85*((i*41%73)/73)) + Math.sin(t*.43+phase)*w*.045;
+      const y=h*(.28+.47*(i%4)/4)+Math.cos(t*.65+phase)*h*.05;
+      ctx.save();ctx.translate(x,y);ctx.rotate(Math.sin(t*.7+phase)*.32);
+      ctx.scale(unit*(.4+.6*Math.abs(Math.cos(t*3+phase))),unit);
+      for(const side of [-1,1]){
+        ctx.fillStyle=['#ce9a55','#93ac96','#b18dae'][i%3];ctx.beginPath();
+        ctx.ellipse(side*.59,-.30,.67,.44,side*-.62,0,2*Math.PI);ctx.fill();
+        ctx.fillStyle='#e6c694';ctx.beginPath();ctx.ellipse(side*.36,.27,.40,.28,side*.5,0,2*Math.PI);ctx.fill();
+      }
+      ctx.fillStyle='#5d594a';ctx.fillRect(-.08,-.38,.16,.84);ctx.restore();
+    }
+    return;
+  }
+  if(effect==='prism'){
+    for(let i=0;i<7;i++){
+      const x=w*(i*.14+.04*Math.sin(t*.22+i)),drift=w*.22;
+      const gradient=ctx.createLinearGradient(x,0,x+drift,h*.72);
+      gradient.addColorStop(0,['#efbeb48a','#e6cf9a75','#a8d9d280'][i%3]);gradient.addColorStop(1,'#faf7de00');
+      ctx.fillStyle=gradient;ctx.beginPath();ctx.moveTo(x-w*.046,0);ctx.lineTo(x+w*.015,0);
+      ctx.lineTo(x+drift+w*.12,h*.78);ctx.lineTo(x+drift,h*.74);ctx.closePath();ctx.fill();
+    }
+    return;
+  }
+  const veil=ctx.createLinearGradient(0,0,0,h*.69);veil.addColorStop(0,'#16274f9a');veil.addColorStop(1,'#182b4900');
+  ctx.fillStyle=veil;ctx.fillRect(0,0,w,h*.69);
+  if(effect==='aurora'){
+    for(let band=0;band<3;band++){
+      const ribbon=ctx.createLinearGradient(0,0,0,h*.44);
+      ribbon.addColorStop(0,'#8bedd500');ribbon.addColorStop(.42,['#88ebbe94','#93cbd594','#b4a1da90'][band]);ribbon.addColorStop(1,'#afdacc00');
+      ctx.fillStyle=ribbon;ctx.beginPath();
+      const edge=x=>h*(.09+band*.045+.053*Math.sin(x*6+t*.24+band)+.042*Math.cos(x*12-t*.17));
+      for(let j=0;j<=56;j++){const x=j/56;if(!j)ctx.moveTo(0,edge(0));else ctx.lineTo(x*w,edge(x))}
+      for(let j=56;j>=0;j--){const x=j/56;ctx.lineTo(x*w,edge(x)+h*(.09+.035*Math.sin(x*15+band)))}
+      ctx.closePath();ctx.fill();
+    }
+  }
+  for(let i=0;i<27;i++){
+    const x=w*((i*71%139)/139),y=h*(.04+.30*(i*43%89)/89);
+    ctx.fillStyle='rgba(250,243,211,'+(.55+.35*Math.sin(t+i))+')';ctx.beginPath();ctx.arc(x,y,1+i%3*.35,0,2*Math.PI);ctx.fill();
+    if(effect==='aurora'&&i%5===1){ctx.strokeStyle='#ecf2d65c';ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+w*.034,y-h*.022);ctx.lineTo(x+w*.068,y+h*.008);ctx.stroke()}
+  }
+  for(let i=0;i<3;i++){
+    const progress=(t*.22+i*.33+.06)%1;if(progress>.31)continue;
+    const x=w*(.22+i*.27-progress*.45),y=h*(.05+progress*.58);
+    const tail=ctx.createLinearGradient(x,y,x+w*.075,y-h*.065);
+    tail.addColorStop(0,'#fff4cf');tail.addColorStop(1,'#fff4cc00');
+    ctx.strokeStyle=tail;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+w*.075,y-h*.065);ctx.stroke();
+  }
 }
 function paintStudioClimate(canvas,frame,zone,weather,seconds){
   const {width:w,height:h,ratio}=frame,pw=Math.round(w*ratio),ph=Math.round(h*ratio);

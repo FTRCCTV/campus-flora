@@ -110,7 +110,7 @@ function paintStudioScene(canvas,view){
   for(const item of items){
     const [x,y,depth]=projection.project([item.x,0,item.z]),id=item.uid??item.id;
     const owner=ids.push(id)-1;
-    const assetKey=JSON.stringify([item.kind,item.latin,item.family,item.form,item.model,item.palette,item.size,item.rotation,item.scale,item.potStyle]);
+    const assetKey=JSON.stringify([item.kind,item.growth,item.latin,item.family,item.form,item.model,item.palette,item.size,item.rotation,item.scale,item.potStyle]);
     let asset=currentObjects.get(assetKey)||cache.objects.get(assetKey);
     if(!asset)asset={faces:studioObjectFaces(item,view,projection,ratio),radius:studioFootprint(item,zone)};
     currentObjects.set(assetKey,asset);

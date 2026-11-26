@@ -55,6 +55,7 @@ async function writeGarden(update){
     if(gardenAccount.mode==='member')return saveMemberGarden(update);
     if(gardenAccount.mode!=='guest')throw Error('请等账号连接完成，或在账号面板中重试。');
     const list=localGarden(),design=localDocument().design;update(list,design);
+    design.seeds=GardenLayout.seedCatalogue(list,design.seeds);
     design.discovered=GardenLayout.discoveries(list,design.discovered);
     if(!GardenLayout.valid(list,design))throw Error('物品重叠或位置无效。');
     localStorage.setItem(gardenKey,JSON.stringify({records:list,design}));

@@ -35,7 +35,7 @@ function renderStudio(){
     resetStudioCamera();
   }
   const edit=studio.mode==='edit',photo=studio.mode==='photo',design=readDesign();
-  studio.design=design;studio.items=studioList(design);renderRewards(design);
+  document.body.dataset.atmosphere=design.effect||'none';studio.design=design;studio.items=studioList(design);renderRewards(design);
   studio.extent=Math.max(edit?studio.extent:3.25,3.25,...studio.items.map(p=>Math.max(Math.abs(p.x),Math.abs(p.z))+GardenLayout.radius(p)+.45));
   if(!studio.items.some(p=>p.uid===studio.selected))studio.selected=null;
   for(const b of $('zones').children)b.setAttribute('aria-pressed',b.dataset.zone===zone);

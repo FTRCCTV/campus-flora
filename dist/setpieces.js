@@ -41,7 +41,23 @@ function studioSetpiece(kind,{face,ring,loft,rectangle,box,pillar},snowy){
     }
   }
 
-  if(kind==='herbmarker'){
+  if(kind==='armillary'){
+    pillar(0,0,0,.38,.38,.12,slate,12,.86);
+    pillar(0,.11,0,.145,.145,.43,brass,12,.72);
+    pillar(0,.51,0,.20,.20,.08,walnut,12,.78);
+    const cy=1.03;
+    for(const [tilt,turn,r] of [[.16,.25,.49],[1.10,-.8,.46],[2.2,.6,.43]]){
+      const point=a=>{
+        const x=r*Math.cos(a),z=r*Math.sin(a)*Math.cos(tilt);
+        return [x*Math.cos(turn)-z*Math.sin(turn),cy+r*Math.sin(a)*Math.sin(tilt),x*Math.sin(turn)+z*Math.cos(turn)];
+      };
+      for(let i=0;i<32;i++)tube(point(i*Math.PI/16),point((i+1)*Math.PI/16),.018,.018,brass,6);
+    }
+    tube([-.21,.61,0],[.21,1.46,0],.018,.018,walnut,8);
+    const orb=ring(0,cy,0,.145,.145,16);
+    loft(ring(0,cy-.13,0,.055,.055,16),orb,enamel);
+    loft(orb,ring(0,cy+.13,0,.055,.055,16),enamel);
+  }else if(kind==='herbmarker'){
     pillar(0,0,0,.14,.14,.055,slate,10);
     box(0,.05,0,.055,.50,.055,walnut);
     box(0,.50,0,.58,.28,.06,brass);

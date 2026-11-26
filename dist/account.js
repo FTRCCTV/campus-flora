@@ -41,6 +41,7 @@ async function saveMemberGarden(update){
     });
     const data=await response.json();
     if(!response.ok){reload=response.status===409||response.status===401;throw Error(data.error||'同步失败，修改未保存。')}
+    design.seeds=data.seeds??GardenLayout.seedCatalogue(list,design.seeds);
     design.discovered=data.discovered??GardenLayout.discoveries(list,design.discovered);
     gardenAccount.version=data.version;gardenAccount.records=list;gardenAccount.design=design;
   }catch(error){

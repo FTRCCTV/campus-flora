@@ -13,6 +13,9 @@ function checkGarden(items){
     for(const field of ['location','family','note']){
       if(p[field]!=null&&(typeof p[field]!=='string'||p[field].length>2000))return false;
     }
+    if(p.growth!==undefined&&(!Number.isInteger(p.growth)||p.growth<0||p.growth>4))return false;
+    if(p.generation!==undefined&&(!Number.isSafeInteger(p.generation)||p.generation<1||p.generation>1000000))return false;
+    if(p.seedFrom!==undefined&&(typeof p.seedFrom!=='string'||p.seedFrom.length>80))return false;
     if(p.palette!=null&&(typeof p.palette!=='object'||Array.isArray(p.palette)||Object.entries(p.palette).some(([k,v])=>!['leaf','bloom'].includes(k)||typeof v!=='string'||!/^#[0-9a-f]{6}$/i.test(v))))return false;
     if(p.model){
       const m=p.model;
@@ -67,18 +70,26 @@ export async function accountGarden(request,env){
     const current=await env.BUCKET.get(objectKey);
     if((current?.httpEtag||'new')!==data.version)return send({error:'花园已有更新，请刷新后重试。'},409);
     const previous=current?await current.json():[];
-    const history=GardenLayout.unpack(previous).design.discovered;
+    const oldGarden=GardenLayout.unpack(previous),history=oldGarden.design.discovered;
+    const oldById=new Map(oldGarden.records.map(p=>[p.uid,p]));
+    for(const p of data.records){
+      const old=oldById.get(p.uid);
+      if(!old||GardenLayout.seedKey(old)!==GardenLayout.seedKey(p))continue;
+      if(p.growth===undefined&&old.growth!==undefined)p.growth=old.growth;
+      if(p.growth!==undefined&&(p.growth<(old.growth??2)||p.growth>(old.growth??2)+1))return send({error:'养成进度已变化，请重新打开植株。'},409);
+      for(const field of ['generation','seedFrom'])if(old[field]!==undefined)p[field]=old[field];
+    }
     // Earn discoveries from saved specimens. A client cannot award itself extra milestones.
-    const normalized=GardenLayout.unpack({records:data.records,design:{...design,discovered:history}});
+    const normalized=GardenLayout.unpack({records:data.records,design:{...design,seeds:oldGarden.design.seeds,discovered:history}});
     data.records=normalized.records;design=normalized.design;
     if(!GardenLayout.valid(data.records,design))return send({error:'物品超出布置范围或彼此重叠，请重新摆放。'},400);
     // The inbox and garden share one version. Preserve unopened gifts on ordinary editor saves.
     const gifts=previous.gifts||[];
-    const serialized=JSON.stringify({records:data.records,design:{scene:design.scene,weather:design.weather,effect:design.effect,discovered:design.discovered,decorations:design.decorations},gifts});
+    const serialized=JSON.stringify({records:data.records,design:{scene:design.scene,weather:design.weather,effect:design.effect,seeds:design.seeds,discovered:design.discovered,decorations:design.decorations},gifts});
     if(new TextEncoder().encode(serialized).length>maxBytes)return send({error:'花园已超过同步容量。'},413);
     const condition=data.version==='new'?{'If-None-Match':'*'}:{'If-Match':data.version};
     const saved=await env.BUCKET.put(objectKey,serialized,{onlyIf:new Headers(condition),httpMetadata:{contentType:'application/json'}});
     if(!saved)return send({error:'另一台设备已更新花园。已请求最新记录，请重新操作。'},409);
-    return send({version:saved.httpEtag,discovered:design.discovered});
+    return send({version:saved.httpEtag,seeds:design.seeds,discovered:design.discovered});
   }catch{return send({error:'同步服务暂不可用，请稍后重试。'},503)}
 }
