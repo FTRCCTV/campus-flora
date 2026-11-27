@@ -252,6 +252,16 @@ dialog:not(#bookIntro)::backdrop { background: #192d25a8; }
 .rewardShelf .locked canvas{filter:saturate(.55)}.rewardShelf .smallBtn{padding:.35rem .5rem;margin:0}.rewardShelf .smallBtn:disabled{opacity:1;color:#6d695b;background:#eee9dc;border-color:#d7cfbd;cursor:default}
 @media(max-width:600px){.rewardBook progress{width:4rem}.rewardBook #nextReward{display:block}.rewardShelf{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
+.selectionPanel,.decorLibrary{padding:14px 0}.selectionPanel h3{font-size:1rem;margin:0 0 8px}
+.decorLibrary{border-top:1px solid #c6c3ae}.decorLibrary summary{cursor:pointer;font-weight:700;color:#29493b}
+.decorLibrary small{font-weight:400;margin-left:.45em;color:#626c58}
+.decorCards{display:grid;grid-template-columns:repeat(auto-fill,minmax(98px,1fr));gap:6px;margin:12px 0;max-height:18rem;overflow:auto}
+.decorCards button{padding:4px 4px 7px;background:#fbf8ef;border:1px solid #d1ceba;border-radius:6px;color:#34483e;font:inherit;font-size:.84rem}
+.decorCards button[aria-pressed=true]{background:#e6eedc;border:2px solid #507047;padding:3px 3px 6px}
+.decorCards button:disabled{color:#716e62;background:#eeece3}.decorCards button:disabled canvas{filter:grayscale(.95);opacity:.65}
+.decorCards canvas{display:block;width:100%;height:54px;object-fit:contain}.decorAdd,.careActions{display:flex;align-items:end;flex-wrap:wrap;gap:8px}
+.careMeters{display:grid;gap:7px;clear:both;margin:12px 0}.careMeters label{display:grid;align-items:center;grid-template-columns:minmax(7.3em,auto) 1fr;gap:10px;font-size:.9rem;font-variant-numeric:tabular-nums}
+.careMeters progress{width:100%;height:9px;accent-color:#577c49}.careActions button:disabled{opacity:.65}
 .nurseryPanel{padding:14px 16px;margin:14px 0;background:#f3f1df;border:1px solid #c4c5a5;border-radius:8px}
 .nurseryHeading{display:flex;align-items:baseline;justify-content:space-between;gap:.5rem}.nurseryHeading h3{margin:0}.nurseryHeading span,.seedRow small{font-size:.85rem;color:#52654d}
 .carePortrait{display:block;width:100%;height:110px;object-fit:contain}.growthTrack{display:flex;flex-wrap:wrap;gap:4px}.growthTrack span{padding:.18rem .45rem;border-bottom:3px solid #dddaca;color:#69695e;font-size:.82rem}.growthTrack .reached{border-color:#90a17b;color:#395340}.growthTrack [aria-current]{font-weight:bold;background:#e0e6ce}

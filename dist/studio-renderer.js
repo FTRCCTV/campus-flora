@@ -5,10 +5,18 @@ function studioColorMix(color,target,amount){
   return '#'+[16,8,0].map(bit=>Math.round(((n>>bit)&255)*(1-amount)+((t>>bit)&255)*amount).toString(16).padStart(2,'0')).join('');
 }
 const studioSurfaceCache=new WeakMap(),studioPropMeshes=new Map();
+function weatherGoal(weather){return {rain:Number(weather==='rain'),snow:Number(weather==='snow')}}
+function sampleWeather(state,now){
+  const progress=Math.max(0,Math.min(1,(now-state.start)/3000)),t=progress*progress*(3-2*progress);
+  const to=weatherGoal(state.weather);
+  return {rain:state.from.rain+(to.rain-state.from.rain)*t,snow:state.from.snow+(to.snow-state.from.snow)*t,progress:t};
+}
 function studioSurfaceFaces(meshes,view){
   const night=view.scene==='starlight',outdoor=!studioIndoor(view.zone);
-  if(!night&&(!outdoor||view.weather==='sunny'))return meshes;
-  const mode=[night,outdoor,view.weather].join('/');
+  const climate=view.surface||weatherGoal(view.weather);
+  const wet=outdoor?Math.round(climate.rain*24)/24:0,snow=outdoor?Math.round(climate.snow*24)/24:0;
+  if(!night&&!wet&&!snow)return meshes;
+  const mode=[night,wet,snow].join('/');
   let variants=studioSurfaceCache.get(meshes);
   if(!variants){variants=new Map();studioSurfaceCache.set(meshes,variants)}
   if(variants.has(mode))return variants.get(mode);
@@ -16,9 +24,9 @@ function studioSurfaceFaces(meshes,view){
   for(const mesh of meshes){
     const colored=night?studioColorMix(mesh.color,'#263d62',outdoor?.42:.18):mesh.color;
     const foliage=outdoor&&(mesh.surface==='leaf'||mesh.surface==='bloom');
-    const rain=foliage&&view.weather==='rain';
-    result.push({...mesh,color:rain?studioColorMix(colored,'#244e4d',.28):colored});
-    if(!foliage||view.weather==='sunny')continue;
+    const base=foliage&&wet?studioColorMix(colored,'#244e4d',.28*wet):colored;
+    result.push({...mesh,color:base});
+    if(!foliage||(!wet&&!snow))continue;
     const v=mesh.vertices,center=[0,0,0],normal=[0,0,0];
     for(let i=0;i<v.length;i++){
       const p=v[i],q=v[(i+1)%v.length];
@@ -26,10 +34,14 @@ function studioSurfaceFaces(meshes,view){
       normal[0]+=(p[1]-q[1])*(p[2]+q[2]);normal[1]+=(p[2]-q[2])*(p[0]+q[0]);normal[2]+=(p[0]-q[0])*(p[1]+q[1]);
     }
     const incline=normal[1]/(Math.hypot(...normal)||1);
-    if(incline<(rain?.64:.27))continue;
-    const coat=rain?.16:.44+incline*.47;
-    result.push({vertices:v.map(p=>p.map((c,j)=>center[j]+(c-center[j])*coat+(j===1?.003:0))),color:rain?'#a5bfb7':night?'#c4d8e8':'#f0f6f4',overlay:true});
+    if(incline<.27)continue;
+    const sheen=incline>=.64?wet:0,coat=.16*sheen+(.44+incline*.47)*snow;
+    if(!coat)continue;
+    const damp=studioColorMix(base,'#a5bfb7',sheen);
+    result.push({vertices:v.map(p=>p.map((c,j)=>center[j]+(c-center[j])*coat+(j===1?.003:0))),
+      color:studioColorMix(damp,night?'#c4d8e8':'#f0f6f4',snow),overlay:true});
   }
+  if(variants.size>=3)variants.delete(variants.keys().next().value);
   variants.set(mode,result);return result;
 }
 // Cache projected vertices for layout drags. Camera changes reproject the original mesh.
@@ -97,20 +109,31 @@ function paintStudioScene(canvas,view){
     cache={backdrop,overlay,frame,architecture:studioRaster(pw,ph)};
     studioViewCaches.set(canvas,cache);
   }
+  const pose=[width,height,ratio,zone,scene,angle,zoom,extent,pitch,panX,panY].join('|');
   if(cache.key!==key){
+    if(cache.pose===pose&&view.surface?.progress<1){
+      if(!cache.fade){cache.fade=document.createElement('canvas');cache.fade.width=pw;cache.fade.height=ph}
+      const old=cache.fade.getContext('2d');old.globalAlpha=cache.fading?(cache.blend??1):1;
+      old.drawImage(cache.backdrop,0,0);old.globalAlpha=1;cache.fading=true;
+    }else cache.fading=false;
+    cache.pose=pose;
     cache.projection=studioProjection(width,height,angle,zoom,extent,pitch,panX,panY);
     cache.habitat=buildStudioBackdrop(cache.backdrop,view,cache.projection,ratio,cache.architecture);
     cache.objects=new Map();cache.key=key;
   }
   const {projection,habitat,frame}=cache,ctx=canvas.getContext('2d');
-  ctx.resetTransform();ctx.drawImage(cache.backdrop,0,0);ctx.setTransform(ratio,0,0,ratio,0,0);
+  ctx.resetTransform();
+  cache.blend=view.surface?.progress??1;
+  if(cache.fading&&cache.blend<1){ctx.drawImage(cache.fade,0,0);ctx.globalAlpha=cache.blend}
+  else{cache.fading=false;cache.fade=null}
+  ctx.drawImage(cache.backdrop,0,0);ctx.globalAlpha=1;ctx.setTransform(ratio,0,0,ratio,0,0);
   frame.depth.set(cache.architecture.depth);frame.pixels.set(cache.architecture.pixels);frame.owners.fill(0);
   const transparent=habitat.transparent.slice(),ids=[null],currentObjects=new Map();
   let handle=null;
   for(const item of items){
     const [x,y,depth]=projection.project([item.x,0,item.z]),id=item.uid??item.id;
     const owner=ids.push(id)-1;
-    const assetKey=JSON.stringify([item.kind,item.growth,item.latin,item.family,item.form,item.model,item.palette,item.size,item.rotation,item.scale,item.potStyle]);
+    const assetKey=JSON.stringify([Math.round((view.surface?.rain||0)*24),Math.round((view.surface?.snow||0)*24),item.kind,item.growth,item.latin,item.family,item.form,item.model,item.palette,item.size,item.rotation,item.scale,item.potStyle]);
     let asset=currentObjects.get(assetKey)||cache.objects.get(assetKey);
     if(!asset)asset={faces:studioObjectFaces(item,view,projection,ratio),radius:studioFootprint(item,zone)};
     currentObjects.set(assetKey,asset);
@@ -132,9 +155,23 @@ function paintStudioScene(canvas,view){
   for(const t of transparent)studioRasterFace(frame,t.surface,t.dx,t.dy,t.dz,t.id);
   cache.overlay.getContext('2d').putImageData(frame.image,0,0);
   ctx.resetTransform();ctx.drawImage(cache.overlay,0,0);
-  function hit(px,py){
+  function hit(px,py,tolerance=0){
     const x=Math.floor(px*ratio),y=Math.floor(py*ratio);
-    return x>=0&&y>=0&&x<pw&&y<ph?ids[frame.owners[y*pw+x]]:null;
+    if(x<0||y<0||x>=pw||y>=ph)return null;
+    const center=y*pw+x,exact=frame.owners[center];
+    if(exact||!tolerance)return ids[exact];
+    const limit=Math.ceil(tolerance*ratio),front=cache.architecture.depth[center];
+    let closest=limit*limit+.01,owner=0;
+    for(let dy=-limit;dy<=limit;dy++){
+      if(y+dy<0||y+dy>=ph)continue;
+      for(let dx=-limit;dx<=limit;dx++){
+        const distance=dx*dx+dy*dy;
+        if(distance>=closest||x+dx<0||x+dx>=pw)continue;
+        const i=(y+dy)*pw+x+dx;
+        if(frame.owners[i]&&frame.depth[i]>=front-.06){closest=distance;owner=frame.owners[i]}
+      }
+    }
+    return ids[owner];
   }
   // Clip indoor weather and window clicks to the same visible glass pixels.
   let windowMask=null;
@@ -152,5 +189,5 @@ function paintStudioScene(canvas,view){
     const px=Math.floor(x*ratio),py=Math.floor(y*ratio);
     return !!windowMask&&px>=0&&py>=0&&px<pw&&py<ph&&cache.paneImage.data[(py*pw+px)*4+3]>0;
   }
-  return {night:scene==='starlight',hit,handle,ground:projection.ground,windowHit,windowMask,width,height,ratio};
+  return {surface:view.surface,night:scene==='starlight',hit,handle,ground:projection.ground,windowHit,windowMask,width,height,ratio};
 }

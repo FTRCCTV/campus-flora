@@ -15,6 +15,15 @@ function drawHabitat({zone,scene,weather,extent,angle,face,box,pillar,ring,recta
   function wallQuad(x1,x2,y1,y2,z){
     return [[x1,y1,z],[x2,y1,z],[x2,y2,z],[x1,y2,z]];
   }
+  function shelfBoard(x,y,z,w,h,d,finish){
+    box(x,y,z,w,h,d,finish);
+    face(rectangle(x,y,z,w,d),finish[0]);
+  }
+  function rearFooting(x,z,w,d){
+    // Extend the existing floor only where the building projects beyond its edge.
+    const back=z-d/2,front=Math.min(-edge,z+d/2);
+    if(front>back)box(x,-.39,(back+front)/2,w,.39,front-back,slate);
+  }
   function shelfBooks(x,y,z,n){
     const covers=['#6f8170','#c28d68','#8c9ba1','#b5a16f','#805f57'];
     for(let i=0;i<n;i++){
@@ -72,11 +81,19 @@ function drawHabitat({zone,scene,weather,extent,angle,face,box,pillar,ring,recta
     }
     {
       // Two timber wall shelves with seed packets, reference books and a vase.
+      const shelfZ=-roomHalf*.37,shelfW=Math.min(2.36,roomHalf*.9);
+      // Floor-standing uprights also support the shelves when the wall cuts away.
+      setLayer(5);
+      for(const sign of [-1,1]){
+        const z=shelfZ+sign*shelfW*.41;
+        box(left+.145,floorY,z,.10,1.72-floorY,.09,oak);
+        box(left+.18,floorY,z,.20,.065,.16,walnut);
+      }
       for(let j=0;j<2;j++){
         setLayer(5);
-        const y=.98+j*.65,z=-roomHalf*.37,w=Math.min(2.36,roomHalf*.9);
-        box(left+.26,y,z,.39,.085,w,walnut);
-        for(const dz of [-w*.34,w*.34])box(left+.17,y-.17,z+dz,.17,.18,.085,brass);
+        const y=.98+j*.65,z=shelfZ,w=shelfW;
+        shelfBoard(left+.26,y,z,.39,.085,w,walnut);
+        for(const dz of [-w*.41,w*.41])box(left+.21,y-.17,z+dz,.19,.17,.075,brass);
         setLayer(6);
         for(let k=0;k<4;k++){
           const b=z-w*.35+k*.14,h=.21+(k*3%4)*.055,c=['#ad785b','#758a71','#a89a74','#72858b'][k];
@@ -168,11 +185,15 @@ function drawHabitat({zone,scene,weather,extent,angle,face,box,pillar,ring,recta
     {
       setLayer(5);
       const cw=Math.min(1.40,span*.83);
-      box(cupboardX,.03,back+.22,cw,.77,.45,panel);
+      // The rear of the cupboard overhangs the desk. A plinth joins it to the room floor.
+      box(cupboardX,floorY,back+.166,cw-.10,-floorY+.03,.075,walnut);
+      box(cupboardX,.03,back+.25,cw,.75,.44,panel);
       box(cupboardX,.78,back+.245,cw+.10,.07,.51,oak);
       for(let j=0;j<2;j++){
-        box(cupboardX+(j-.5)*cw*.47,.11,back+.471,cw*.42,.56,.04,panel);
-        pillar(cupboardX+(j-.5)*cw*.27,.38,back+.505,.035,.035,.054,brass,7);
+        const doorX=cupboardX+(j-.5)*cw*.47;
+        box(doorX,.11,back+.49,cw*.42,.56,.04,panel);
+        box(doorX,.17,back+.518,cw*.32,.43,.016,green);
+        pillar(cupboardX+(j-.5)*cw*.27,.38,back+.542,.025,.025,.054,brass,7);
       }
       setLayer(6);
       shelfBooks(cupboardX-cw*.39,.85,back+.24,Math.min(5,Math.floor(cw/.16)));
@@ -203,21 +224,25 @@ function drawHabitat({zone,scene,weather,extent,angle,face,box,pillar,ring,recta
     }
   }else if(scene==='courtyard'){
     // Moon gate: curved masonry infill keeps the centre actually open.
-    const radius=1.04,cy=1.08,wallH=2.32,z=rear-.035;
+    const radius=1.04,cy=1.15,wallH=2.32,z=rear-.035,halfDepth=.095;
     const plaster=['#c3bdad','#d2cbb8','#ddd6c4','#eee6d3'];
     for(const s of [-1,1]){
       const width=edge-radius,x=s*(radius+width/2);
-      box(x,.015,z,width,wallH,.19,plaster);
+      box(x,0,z,width,wallH,halfDepth*2,plaster);
       box(x,.01,z+.02,width,.28,.24,slate);
     }
     for(let i=0;i<20;i++){
       const a=Math.PI*i/20,b=Math.PI*(i+1)/20;
       const x0=radius*Math.cos(a),x1=radius*Math.cos(b),y0=radius*Math.sin(a),y1=radius*Math.sin(b);
-      face([[x0,cy+y0,z+.10],[x1,cy+y1,z+.10],[x1,wallH,z+.10],[x0,wallH,z+.10]],'#ddd7c5');
-      face([[x0,.02,z+.10],[x1,.02,z+.10],[x1,cy-y1,z+.10],[x0,cy-y0,z+.10]],'#d3ccba');
       for(const half of [-1,1]){
-        const rt=radius+.09;
-        face([[x0,cy+half*y0,z+.12],[x1,cy+half*y1,z+.12],[rt*Math.cos(b),cy+half*rt*Math.sin(b),z+.12],[rt*Math.cos(a),cy+half*rt*Math.sin(a),z+.12]],'#82908a');
+        const rt=radius+.09,edgeY=half===1?wallH:0;
+        for(const side of [-1,1]){
+          const wallZ=z+side*halfDepth,trimZ=wallZ+side*.018;
+          face([[x0,cy+half*y0,wallZ],[x1,cy+half*y1,wallZ],[x1,edgeY,wallZ],[x0,edgeY,wallZ]],side===1?'#ddd7c5':'#c8c3b4');
+          face([[x0,cy+half*y0,trimZ],[x1,cy+half*y1,trimZ],[rt*Math.cos(b),cy+half*rt*Math.sin(b),trimZ],[rt*Math.cos(a),cy+half*rt*Math.sin(a),trimZ]],i%4===0?'#78877f':'#8b9890');
+        }
+        const lip=halfDepth+.018;
+        face([[x0,cy+half*y0,z-lip],[x1,cy+half*y1,z-lip],[x1,cy+half*y1,z+lip],[x0,cy+half*y0,z+lip]],half===1?'#758078':'#a4aa98');
       }
     }
     box(0,wallH,z,edge*2+.12,.10,.34,slate);box(0,wallH+.09,z,edge*2+.22,.075,.48,slate);
@@ -228,15 +253,22 @@ function drawHabitat({zone,scene,weather,extent,angle,face,box,pillar,ring,recta
       for(const d of [-.24,0,.24])box(x+d,.84,z+.17,.042,.62,.055,walnut);
       for(const y of [.97,1.26])box(x,y,z+.18,.70,.04,.055,walnut);
     }
-    tree(edge*.83,rear+.04,1.8,.7);
+    tree(edge-.12,rear+.58,1.8,.65);
   }else if(scene==='terrace'){
     const iron=['#546c69','#6c827a','#789087','#8d9b89'];
-    box(0,0,rear,2*edge,.31,.24,brick);
-    for(let i=0;i<=9;i++)box(-edge+2*edge*i/9,.29,rear,.075,.62,.075,iron);
-    for(const y of [.54,.88])box(0,y,rear,2*edge,.062,.08,iron);
     // Rooftop potting greenhouse, glazed in separate bays with a pitched roof.
     const x=-edge*.53,z=rear-.08,w=Math.min(2.05,extent*.62),d=.70,eave=1.42,peak=1.85;
-    box(x,.03,z,w+.17,.16,d+.13,brick);
+    const hvX=edge*.67,hvW=1.08;
+    // Railings terminate at the equipment bays; rails previously crossed the glasshouse.
+    for(const [start,end] of [[-edge,x-w/2-.13],[x+w/2+.13,hvX-hvW/2-.08],[hvX+hvW/2+.08,edge]]){
+      if(end<=start)continue;
+      const run=end-start,count=Math.ceil(run/.85);
+      box((start+end)/2,0,rear,run,.31,.24,brick);
+      for(let i=0;i<=count;i++)box(start+run*i/count,.31,rear,.055,.60,.055,iron);
+      for(const y of [.54,.88])box((start+end)/2,y,rear,run+.055,.052,.074,iron);
+    }
+    rearFooting(x,z,w+.20,d+.16);
+    box(x,0,z,w+.17,.18,d+.13,brick);
     for(const side of [-1,1]){
       const zz=z+side*d*.5;
       for(let i=0;i<4;i++)box(x-w*.5+i*w/3,.18,zz,.055,eave-.18,.055,iron);
@@ -246,25 +278,43 @@ function drawHabitat({zone,scene,weather,extent,angle,face,box,pillar,ring,recta
         face(wallQuad(xx+.035,xx+w/3-.035,.20,eave-.03,zz),wet?'#a1c0bd8c':'#b5d9cb8c');
       }
       face([[x-w/2,eave,zz],[x+w/2,eave,zz],[x+w/2,peak,z],[x-w/2,peak,z]],snow?'#dce7df':'#a9cbb9aa');
+      for(let i=0;i<4;i++){
+        const postX=x-w/2+i*w/3;
+        face([[postX-.022,eave+.008,zz],[postX+.022,eave+.008,zz],[postX+.022,peak+.008,z],[postX-.022,peak+.008,z]],'#71877a');
+      }
+    }
+    for(const side of [-1,1]){
+      const end=x+side*w/2;
+      face([[end,.18,z-d/2+.032],[end,.18,z+d/2-.032],[end,eave,z+d/2-.032],[end,peak,z],[end,eave,z-d/2+.032]],wet?'#94b3ae82':'#accbbb82');
+      for(const y of [.72,eave])box(end,y,z,.05,.04,d,iron);
     }
     box(x,peak,z,w+.10,.055,.06,iron);
-    const hvX=edge*.67;
-    box(hvX,.01,rear,1.08,.57,.48,slate);
+    rearFooting(hvX,rear,hvW+.09,.57);
+    box(hvX,0,rear,hvW,.57,.48,slate);
     for(let j=0;j<6;j++)box(hvX-.39+j*.155,.14,rear+.25,.058,.31,.03,metal);
   }else{
     const x=edge*.43,z=rear-.08,w=Math.min(2.91,extent*.96);
     // Brick campus gatehouse and lit courtyard windows.
-    box(x,.01,z,w,1.15,.60,brick);box(x,1.14,z,w+.19,.09,.74,chalk);
+    rearFooting(x,z,w+.13,.69);
+    box(x,0,z,w+.08,.045,.65,slate);
+    box(x,.045,z,w,1.095,.60,brick);
+    shelfBoard(x,1.14,z,w+.19,.08,.74,chalk);
     face([[x-w*.55,1.22,z+.39],[x+w*.55,1.22,z+.39],[x+w*.42,1.52,z],[x-w*.42,1.52,z]],snow?'#d7dfd3':'#70807d');
     face([[x-w*.55,1.22,z-.39],[x+w*.55,1.22,z-.39],[x+w*.42,1.52,z],[x-w*.42,1.52,z]],snow?'#c9d5ca':'#566d69');
     for(const s of [-1,1]){
+      face([[x+s*w*.55,1.22,z+.39],[x+s*w*.55,1.22,z-.39],[x+s*w*.42,1.52,z]],snow?'#ccd7cd':'#637873');
       const wx=x+s*w*.33;
       box(wx,.41,z+.30,.47,.48,.075,chalk);
       face(wallQuad(wx-.17,wx+.17,.47,.83,z+.34),night?'#ffdb95':'#819b93',night);
       box(wx,.47,z+.345,.035,.36,.036,chalk);
+      box(wx,.68,z+.345,.34,.026,.032,chalk);
+      shelfBoard(wx,.39,z+.33,.54,.04,.14,slate);
     }
+    box(x,1.517,z,w*.84+.04,.035,.055,slate);
     box(x,.04,z+.31,.50,.86,.11,oak);
     face(wallQuad(x-.18,x+.18,.06,.82,z+.371),'#687e70');
+    box(x,.53,z+.382,.32,.028,.024,oak);
+    box(x+.125,.39,z+.393,.031,.064,.029,brass);
     if(zone==='pond'){
       face(ring(-edge*.43,.015,rear,Math.min(1.62,edge*.43),.41,18),'#6da098');
       for(let i=0;i<5;i++)face(ring(-edge*.65+i*.24,.027,rear+.15*Math.sin(i),.09,.07,7),'#97a96f');
@@ -272,11 +322,11 @@ function drawHabitat({zone,scene,weather,extent,angle,face,box,pillar,ring,recta
       for(let k=0;k<5;k++)pillar(-edge+(.10+.11*k)*edge,.02,rear,.055,.055,.55,walnut,6);
       box(-edge*.67,.32,rear,edge*.46,.045,.065,oak);
     }
-    tree(-edge*.69,rear-.04,1.97,.85);
+    tree(-edge+.12,rear+.53,1.97,.72);
     if(night){
       const lanternBody=['#3d464e','#49525a','#596267','#737979'];
       for(const x of [-edge*.85,edge*.84]){
-        const z=rear+.56;
+        const z=rear+.20;
         setLayer(1.5);
         // Nested light pools sit flat on the path and follow its projection.
         face(ring(x,.016,z,.58,.43,20),'#ffd79715',true);

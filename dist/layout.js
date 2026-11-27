@@ -7,11 +7,11 @@ const GardenLayout=(()=>{
   const propRadii={bench:.90,lantern:.36,rock:.62,arch:1.03,planter:.55,terrarium:.64,worktable:.84,plantstand:.66,wateringcan:.70,teatable:.48,steppingstones:.76,fence:.80,fountain:.61,herbmarker:.33,birdbath:.50,sundial:.55,armillary:.59};
   const effects={none:'关闭',petals:'风送花瓣',fireflies:'流萤微光',butterflies:'蝶影花径',prism:'花窗流彩',meteors:'流星天幕',aurora:'极光星图'};
   const rewards=[
-    {at:1,id:'herbmarker',label:props.herbmarker},{at:3,id:'petals',label:effects.petals},
-    {at:5,id:'birdbath',label:props.birdbath},{at:6,id:'fireflies',label:effects.fireflies},
-    {at:10,id:'sundial',label:props.sundial},{at:12,id:'butterflies',label:effects.butterflies},
-    {at:18,id:'prism',label:effects.prism},{at:25,id:'armillary',label:props.armillary},
-    {at:35,id:'meteors',label:effects.meteors},{at:50,id:'aurora',label:effects.aurora}
+    {at:1,id:'herbmarker',label:props.herbmarker},{at:2,id:'petals',label:effects.petals},
+    {at:3,id:'birdbath',label:props.birdbath},{at:4,id:'fireflies',label:effects.fireflies},
+    {at:5,id:'sundial',label:props.sundial},{at:6,id:'butterflies',label:effects.butterflies},
+    {at:8,id:'prism',label:effects.prism},{at:10,id:'armillary',label:props.armillary},
+    {at:12,id:'meteors',label:effects.meteors},{at:15,id:'aurora',label:effects.aurora}
   ];
   function discoveries(records,previous=[]){
     const keys=new Set(Array.isArray(previous)?previous:[]);
@@ -23,6 +23,22 @@ const GardenLayout=(()=>{
   }
   function unlocked(id,count){return !rewards.some(r=>r.id===id&&count<r.at)}
   // A collected seed variety is reusable and survives removal of its parent plant.
+  function carePlan(plant){
+    const stage=plant.growth??2,form=plant.model?.form||plant.form;
+    const water=stage===0||form==='rosette'?1:2;
+    const light=stage===2||form==='flower'||form==='rosette'?2:1;
+    return {water,light};
+  }
+  function tend(plant,action){
+    const stage=plant.growth??2;
+    if(stage===3&&action==='harvest'){plant.growth=4;return}
+    const goals=carePlan(plant),care={water:0,light:0,...plant.care};
+    if(stage>=3||!Object.hasOwn(goals,action)||care[action]>=goals[action])throw Error('这项照料已完成。');
+    care[action]++;
+    if(care.water>=goals.water&&care.light>=goals.light){
+      plant.growth=stage+1;delete plant.care;
+    }else plant.care=care;
+  }
   function seedKey(plant){return globalThis.FloraCatalog.speciesKey(plant.latin)||String(plant.latin).trim().toLowerCase()}
   function seedCatalogue(records,previous=[]){
     const packets=new Map(previous.map(p=>[seedKey(p),p]));
@@ -82,7 +98,6 @@ const GardenLayout=(()=>{
     sundial:[disk(0,0,0,.34,.12),disk(0,.12,0,.17,.51),disk(0,.63,0,.53,.13),box(0,.76,0,.08,.31,.43)],
     fountain:[disk(0,0,0,.607,.205),disk(0,.205,0,.122,.41),disk(0,.61,0,.26,.13),disk(0,.74,0,.037,.12)]
   };
-  const openProps=new Set(['arch','bench','worktable','plantstand','teatable','fence','wateringcan','steppingstones']);
   for(const x of [-.78,.78]){
     components.arch.push(box(x,.01,0,.28,.16,.43));
     for(const z of [-.14,.14])components.arch.push(box(x,.17,z,.106,1.52,.11));
@@ -132,12 +147,18 @@ const GardenLayout=(()=>{
   }
   for(const y of [.112,.49])components.wateringcan.push(box(-.34,y-.026,0,.14,.052,.052));
 
+  const broadProps=Object.fromEntries(Object.entries(components).map(([kind,parts])=>{
+    const reach=Math.max(...parts.map(p=>p.r===undefined
+      ?Math.hypot(Math.abs(p.x)+p.hx,Math.abs(p.z)+p.hz):Math.hypot(p.x,p.z)+p.r));
+    return [kind,Math.max(propRadii[kind],reach)];
+  }));
+  const broadRadius=item=>item.kind?broadProps[item.kind]*(item.scale??1):radius(item);
   let specimenMeshFactory;
   const plantParts=new Map();
   function setSpecimenMesh(factory){specimenMeshFactory=factory;plantParts.clear()}
   function plantEnvelope(item){
     const indoor=(legacyZones[item.zone]||item.zone)==='sill',model=item.model||{};
-    const key=JSON.stringify([indoor,item.size,item.potStyle,item.latin,item.family,item.form,model.form,
+    const key=JSON.stringify([indoor,item.growth,item.size,item.potStyle,item.latin,item.family,item.form,model.form,
       model.count,model.height,model.spread,model.leafShape,model.crownShape,model.petals,
       model.arrangement,model.inflorescence,model.margin,model.leafAspect,model.habit,
       model.leafCompound,model.leaflets,model.flowerShape,model.bloomLoad,model.fruit]);
@@ -146,11 +167,16 @@ const GardenLayout=(()=>{
       const heights=indoor?{small:1.248,medium:1.608,large:2.008}:{small:1.05,medium:1.72,large:2.4};
       return [disk(0,0,0,radius(item),heights[item.size]||heights.medium)];
     }
-    const faces=specimenMeshFactory({...item,growth:undefined},indoor);
+    const faces=specimenMeshFactory(item,indoor);
     const bands=[],step=.10;
     // A cylinder per horizontal slice leaves the area below a tree canopy
     // clear. Sample every edge crossing a slice boundary, including long stems.
-    function mark(i,x,z){bands[i]=Math.max(bands[i]||0,Math.hypot(x,z))}
+    function mark(i,x,z){
+      const band=bands[i]??={r:0,minX:x,maxX:x,minZ:z,maxZ:z};
+      band.r=Math.max(band.r,Math.hypot(x,z));
+      band.minX=Math.min(band.minX,x);band.maxX=Math.max(band.maxX,x);
+      band.minZ=Math.min(band.minZ,z);band.maxZ=Math.max(band.maxZ,z);
+    }
     let top=0;
     for(const {vertices} of faces){
       for(let k=0;k<vertices.length;k++){
@@ -165,18 +191,25 @@ const GardenLayout=(()=>{
         }
       }
     }
-    const parts=bands.flatMap((r,i)=>r>0&&i*step<top?[disk(0,i*step,0,r,Math.min(step,top-i*step))]:[]);
+    const parts=bands.flatMap((b,i)=>{
+      if(!b.r||i*step>=top)return [];
+      const h=Math.min(step,top-i*step),slice=disk(0,i*step,0,b.r,h);
+      slice.bounds=box((b.minX+b.maxX)/2,i*step,(b.minZ+b.maxZ)/2,
+        Math.max(.001,b.maxX-b.minX),h,Math.max(.001,b.maxZ-b.minZ));
+      return [slice];
+    });
     if(plantParts.size>=96)plantParts.delete(plantParts.keys().next().value);
     plantParts.set(key,parts);return parts;
   }
   function worldParts(item){
-    const scale=item.kind?(item.scale??1):1,angle=item.kind?(item.rotation??0):0,c=Math.cos(angle),s=Math.sin(angle);
+    const scale=item.kind?(item.scale??1):1,angle=item.rotation??0,c=Math.cos(angle),s=Math.sin(angle);
     const parts=item.kind?components[item.kind]:plantEnvelope(item);
-    return parts.map(p=>({
+    const transform=p=>({
       x:item.x+scale*(p.x*c-p.z*s),z:item.z+scale*(p.x*s+p.z*c),
       lo:p.lo*scale,hi:p.hi*scale,r:p.r===undefined?null:p.r*scale,
       hx:(p.hx||0)*scale,hz:(p.hz||0)*scale,c,s
-    }));
+    });
+    return parts.map(p=>({...transform(p),bounds:p.bounds&&transform(p.bounds)}));
   }
   const epsilon=.00001;
   function partOverlap(a,b){
@@ -196,19 +229,19 @@ const GardenLayout=(()=>{
       Math.abs(dx*b.c+dz*b.s)<b.hx+a.hx*c+a.hz*s-epsilon&&
       Math.abs(-dx*b.s+dz*b.c)<b.hz+a.hz*c+a.hx*s-epsilon;
   }
-  function clear(p,list){
+  function blocker(p,list){
     let candidate;
-    return !list.some(q=>{
+    return list.find(q=>{
       if(q.zone!==p.zone||q.uid===p.uid&&p.uid)return false;
       const other=located(q);
-      const reach=radius(p)+radius(q)-epsilon;
+      const reach=broadRadius(p)+broadRadius(q)-epsilon;
       if((other.x-p.x)**2+(other.z-p.z)**2>=reach*reach)return false;
-      if(!openProps.has(p.kind)&&!openProps.has(q.kind))return true;
       candidate??=worldParts(p);
       const obstacle=worldParts(other);
-      return candidate.some(a=>obstacle.some(b=>partOverlap(a,b)));
+      return candidate.some(a=>obstacle.some(b=>partOverlap(a,b)&&(!(a.bounds||b.bounds)||partOverlap(a.bounds||a,b.bounds||b))));
     });
   }
+  function clear(p,list){return !blocker(p,list)}
   function place(p,list,preferred){
     if(preferred&&Number.isFinite(preferred.x)&&Number.isFinite(preferred.z)&&clear({...p,x:preferred.x,z:preferred.z},list))return {x:preferred.x,z:preferred.z};
     for(let n=0;n<10000;n++){
@@ -237,6 +270,6 @@ const GardenLayout=(()=>{
     }
     return true;
   }
-  return {seedKey,seedCatalogue,rewards,effects,discoveries,unlocked,zones,scenes,weather,props,propRadii,empty,unpack,radius,located,clear,place,valid,setSpecimenMesh};
+  return {carePlan,tend,seedKey,seedCatalogue,rewards,effects,discoveries,unlocked,zones,scenes,weather,props,propRadii,empty,unpack,radius,located,blocker,clear,place,valid,setSpecimenMesh};
 })();
 globalThis.GardenLayout=GardenLayout;

@@ -88,8 +88,11 @@ function paintStudioClimate(canvas,frame,zone,weather,seconds){
   ctx.setTransform(ratio,0,0,ratio,0,0);ctx.clearRect(0,0,w,h);ctx.save();
   const indoor=studioIndoor(zone);
   if(indoor&&!frame.windowMask){ctx.restore();return}
-  if(weather==='sunny'&&frame.night){ctx.restore();return}
-  if(weather==='sunny'){
+  const mix=frame.surface||weatherGoal(weather);
+  for(const [type,opacity] of [['sunny',1-mix.rain-mix.snow],['rain',mix.rain],['snow',mix.snow]]){
+  if(opacity<=.001||(type==='sunny'&&frame.night))continue;
+  ctx.globalAlpha=opacity;
+  if(type==='sunny'){
     const y=indoor?h*.28:h*.15;
     for(let i=0;i<3;i++){
       const rx=w*(.12+.035*i),x=((i*.41*w+seconds*(2.5+i)+rx)%(w+2*rx))-rx;
@@ -99,7 +102,7 @@ function paintStudioClimate(canvas,frame,zone,weather,seconds){
       ctx.fillStyle=glow;ctx.fillRect(x-rx,y-rx,rx*2,rx*2);ctx.restore();
     }
   }else{
-    const snow=weather==='snow',n=Math.min(160,Math.max(58,Math.round(w/6)));
+    const snow=type==='snow',n=Math.min(160,Math.max(58,Math.round(w/6)));
     for(let i=0;i<n;i++){
       const seed=((i*67+13)%101)/101,depth=.45+seed*.75;
       const y=(i*79.37+seconds*(snow?34:270)*depth)%(h+22)-11;
@@ -114,6 +117,8 @@ function paintStudioClimate(canvas,frame,zone,weather,seconds){
       }
     }
   }
+  }
+  ctx.globalAlpha=1;
   if(indoor){
     ctx.globalCompositeOperation='destination-in';
     ctx.resetTransform();ctx.drawImage(frame.windowMask,0,0);

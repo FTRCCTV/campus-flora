@@ -142,41 +142,8 @@ function drawStudioStars(ctx,width,height,angle,weather,moonVisible){
 function buildStudioBackdrop(canvas,view,projection,ratio,architecture){
   const {scene,weather,zone,angle,extent}=view,width=canvas.width/ratio,height=canvas.height/ratio;
   const {project,edge}=projection,ctx=canvas.getContext('2d');
-  const inside=studioIndoor(zone),terrace=scene==='terrace',court=scene==='courtyard';
-  const rainy=weather==='rain',snowy=weather==='snow',night=scene==='starlight';
   ctx.setTransform(ratio,0,0,ratio,0,0);
-  const sky=ctx.createLinearGradient(0,0,0,height);
-  const stops=night?(snowy?['#28394c','#657488','#586676']:rainy?['#1d2b3b','#465566','#394755']:['#101a35','#485777','#5e687a']):
-    snowy?['#afc0c9','#e7ede8','#d5ded8']:rainy?['#899eaa','#cfdbd6','#b9cabe']:
-    terrace?['#a8d1ce','#f8e7bf','#e1e0c4']:court?['#c4d8c7','#f6ebce','#e2dfc4']:['#b4d8d3','#f5edcd','#d9e4ca'];
-  sky.addColorStop(0,stops[0]);sky.addColorStop(.64,stops[1]);sky.addColorStop(1,stops[2]);
-  ctx.fillStyle=sky;ctx.fillRect(0,0,width,height);
-  if(night)drawStudioStars(ctx,width,height,angle,weather,!inside||Math.cos(angle)<=-.1);
-  else if(!rainy&&!snowy){
-    const sx=width*.77,sy=height*.18,r=Math.min(height,width)*.068;
-    const glow=ctx.createRadialGradient(sx,sy,r*.55,sx,sy,r*3.4);
-    glow.addColorStop(0,'#fff6d9b5');glow.addColorStop(1,'#fff6d900');
-    ctx.fillStyle=glow;ctx.fillRect(sx-r*3.4,sy-r*3.4,r*6.8,r*6.8);
-    ctx.fillStyle='#fff5d8';ctx.beginPath();ctx.arc(sx,sy,r,0,2*Math.PI);ctx.fill();
-  }
-  function ridge(fraction,tone,amplitude,offset){
-    ctx.fillStyle=tone;ctx.beginPath();ctx.moveTo(0,height);
-    for(let i=0;i<=32;i++){
-      const x=i/32,y=fraction+amplitude*(Math.sin(i*.54+offset)+.5*Math.cos(i*.96+offset));
-      ctx.lineTo(width*x,height*y);
-    }
-    ctx.lineTo(width,height);ctx.closePath();ctx.fill();
-  }
-  ridge(.48,night?'#3e5264':snowy?'#c2d0cf':rainy?'#acbeba':'#bfd3bf',.038,1.4);
-  ridge(.53,night?'#2b414f':snowy?'#cdd9d2':rainy?'#b4c3bc':'#cbdcc2',.026,3.5);
-  if(terrace){
-    ctx.fillStyle=snowy?'#b1c1c1':rainy?'#a0b2ae':'#b3c7ba';
-    for(let i=0;i<27;i++){
-      const bx=(i-.5)/26*width,by=(.46+.055*Math.sin(i*5.34))*height,bw=width/30;
-      ctx.fillRect(bx,by,bw,height*.56-by);
-      if(i%5===0)ctx.fillRect(bx+bw*.42,by-height*.027,bw*.1,height*.03);
-    }
-  }
+  paintCampusPanorama(ctx,width,height,view);
   const geometry=studioBackdropGeometry(view,edge);
   const projected=geometry.faces.map(f=>{
     const p=f.vertices.map(project);
