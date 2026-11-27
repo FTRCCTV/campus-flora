@@ -14,8 +14,10 @@ function checkGarden(items){
       if(p[field]!=null&&(typeof p[field]!=='string'||p[field].length>2000))return false;
     }
     if(p.growth!==undefined&&(!Number.isInteger(p.growth)||p.growth<0||p.growth>4))return false;
+    if(p.careCount!==undefined&&(!Number.isInteger(p.careCount)||p.careCount<0||p.careCount>1000000))return false;
     if(p.care!==undefined){
-      if(!p.care||typeof p.care!=='object'||Array.isArray(p.care)||Object.keys(p.care).some(k=>!['water','light'].includes(k)))return false;
+      if(!p.care||typeof p.care!=='object'||Array.isArray(p.care)||Object.keys(p.care).some(k=>!['water','light','nutrient'].includes(k)))return false;
+      if(p.care.nutrient!==undefined&&![0,1].includes(p.care.nutrient))return false;
       if((p.growth??2)>=3||!['water','light'].every(k=>Number.isInteger(p.care[k])&&p.care[k]>=0&&p.care[k]<=2))return false;
     }
     if(p.generation!==undefined&&(!Number.isSafeInteger(p.generation)||p.generation<1||p.generation>1000000))return false;
@@ -81,6 +83,8 @@ export async function accountGarden(request,env){
       if(!old||GardenLayout.seedKey(old)!==GardenLayout.seedKey(p))continue;
       if(p.growth===undefined&&old.growth!==undefined)p.growth=old.growth;
       if(p.growth!==undefined&&(p.growth<(old.growth??2)||p.growth>(old.growth??2)+1))return send({error:'养成进度已变化，请重新打开植株。'},409);
+      for(const k of ['potSticker','plantCharm','careCount'])if(p[k]===undefined&&old[k]!==undefined)p[k]=old[k];
+      if(p.care&&old.care?.nutrient!==undefined&&p.care.nutrient===undefined&&(p.growth??2)===(old.growth??2))p.care.nutrient=old.care.nutrient;
       if(p.care===undefined&&old.care&&(p.growth??2)===(old.growth??2))p.care=old.care;
       for(const field of ['generation','seedFrom'])if(old[field]!==undefined)p[field]=old[field];
     }

@@ -598,6 +598,23 @@ function specimenMesh(record, potted=false) {
   if(record.growth===0||record.growth===1){
     for(let i=faces.length-1;i>=0;i--)if(faces[i].surface==='bloom')faces.splice(i,1);
   }
+  if(['ribbon','tag','butterfly'].includes(record.plantCharm)){
+    // Tie the ornament to a real outward-facing leaf in the normalized model.
+    const target=soil+(high-low)*scale*.7;
+    let anchor,best=-Infinity;
+    for(const f of faces){
+      if(f.surface!=='leaf')continue;
+      for(const v of f.vertices){
+        const score=.42*v[0]+.76*v[2]-1.2*Math.abs(v[1]-target);
+        if(score>best){best=score;anchor=v}
+      }
+    }
+    if(!anchor)anchor=faces.at(-1)?.vertices[0];
+    if(anchor){
+      const size=Math.max(.035,Math.min(.15,Math.max(radius,high-low)*scale*.16));
+      addSpecimenCharm(faces,record.plantCharm,anchor,size,soil);
+    }
+  }
   if(potted){
     const celadon=record.potStyle==='celadon',stone=record.potStyle==='basalt',sides=celadon?32:stone?10:20;
     const profile=celadon?[[0,.248],[.044,.248],[.058,.28],[.16,.348],[.399,.423],[.516,.429],[.549,.453],[.604,.443],[.604,.399],[.578,.393]]:
@@ -619,6 +636,9 @@ function specimenMesh(record, potted=false) {
       }
     }
     face(rings[rings.length-1],'#665043');
+    if(['daisy','stars','waves'].includes(record.potSticker)){
+      addPotSticker(faces,record.potSticker,rings,profile);
+    }
     for(let i=0;i<10;i++){
       const a=i*golden,r=.18+.17*((i*7)%11)/10,x=r*Math.cos(a),z=r*Math.sin(a);
       face([[x-.013,.58,z],[x-.004,.585,z-.012],[x+.017,.582,z+.003],[x+.004,.58,z+.015]],i%3?'#8e7965':'#ab967c');
@@ -627,11 +647,87 @@ function specimenMesh(record, potted=false) {
   return faces;
 }
 
-function paintSpecimen(canvas, plant, {potted=false,portrait=true,width=520,height=460}={}) {
+// Map the painted motifs onto the actual tapered and fluted pot, including the flat stone facets.
+function addPotSticker(faces,style,rings,profile){
+  const tau=Math.PI*2,sides=rings[0].length;
+  function onPot(angle,y,lift){
+    let row=0;
+    while(row+1<profile.length-1&&profile[row+1][0]<y)row++;
+    const t=(y-profile[row][0])/(profile[row+1][0]-profile[row][0]);
+    const step=((angle/tau%1+1)%1)*sides,i=Math.floor(step)%sides,j=(i+1)%sides,u=step-Math.floor(step);
+    const xz=axis=>{
+      const low=rings[row][i][axis]*(1-u)+rings[row][j][axis]*u;
+      const high=rings[row+1][i][axis]*(1-u)+rings[row+1][j][axis]*u;
+      return low+(high-low)*t;
+    };
+    return [xz(0)+lift*Math.cos(angle),y,xz(2)+lift*Math.sin(angle)];
+  }
+  for(const direction of [1.19,1.19+tau/3,1.19-tau/3]){
+    const ink=(points,color,lift=.006)=>faces.push({color,accessory:true,
+      vertices:points.map(([x,y])=>onPot(direction-x/.38,.303+y,lift))});
+    if(style==='daisy'){
+      for(let i=0;i<9;i++){
+        const a=i*tau/9,c=Math.cos(a),s=Math.sin(a);
+        const p=(r,w)=>[r*c-w*s,r*s+w*c];
+        ink([p(.016,0),p(.05,.021),p(.093,.018),p(.102,0),p(.091,-.019),p(.05,-.022)],i%3?'#fff2cd':'#f1dfb9');
+      }
+      ink(Array.from({length:10},(_,i)=>[.028*Math.cos(i*tau/10),.028*Math.sin(i*tau/10)]),'#dc9a3c',.01);
+    }else if(style==='stars'){
+      for(const [x,y,size] of [[-.01,.005,.073],[.077,.056,.029],[-.081,-.05,.025]]){
+        for(let i=0;i<4;i++){
+          const a=i*tau/4,point=(r,b)=>[x+r*Math.cos(b),y+r*Math.sin(b)];
+          ink([[x,y],point(size*.33,a-.785),point(size,a),point(size*.33,a+.785)],i%2?'#f6cf72':'#fff2c6');
+        }
+      }
+    }else{
+      for(let row=0;row<3;row++)for(let i=0;i<13;i++){
+        const point=(j,h)=>[(j/13-.5)*.305,(row-1)*.042+.025*Math.sin(j*tau/13)+h];
+        ink([point(i,0),point(i+1,0),point(i+1,.014),point(i,.014)],row===1?'#6fbaae':'#e1f2db');
+      }
+    }
+  }
+}
+
+function addSpecimenCharm(faces,style,[x,y,z],size,soil){
+  // A pendant resting on low basal leaves tilts outwards instead of cutting through the soil.
+  const drop=style==='tag'?1.07:style==='ribbon'?.81:.27;
+  const upright=Math.min(1,Math.max(0,(y-soil)/(drop*size))),tilt=Math.sqrt(1-upright*upright);
+  const point=([u,v,w])=>{
+    const height=v*upright+w*tilt,depth=w*upright-v*tilt;
+    return [x+size*(u*.94+depth*.34),y+size*height,z+size*(depth*.94-u*.34)];
+  };
+  const add=(color,points)=>faces.push({color,vertices:points.map(point),accessory:true});
+  if(style==='ribbon'){
+    for(const side of [-1,1]){
+      const bow=points=>points.map(([u,v,w])=>[side*u,v,w]);
+      add('#b35055',bow([[0,0,.05],[.67,.42,.12],[.83,.18,.28],[.74,-.14,.23],[.35,-.11,.12]]));
+      add('#e5917d',bow([[0,0,.09],[.66,.4,.15],[.48,.08,.32]]));
+      add('#be6065',bow([[.03,-.02,.12],[.26,-.06,.15],[.48,-.74,.13],[.31,-.61,.17],[.25,-.81,.15]]));
+    }
+    add('#f2bd94',[[-.14,.14,.28],[.13,.14,.28],[.15,-.12,.28],[-.13,-.11,.28]]);
+  }else if(style==='tag'){
+    add('#977d4e',[[-.03,.02,0],[.03,.02,.02],[.2,-.38,.32],[.14,-.4,.32]]);
+    add('#8e6236',[[-.37,-.37,.33],[.43,-.37,.33],[.5,-.52,.31],[.47,-1.07,.29],[-.4,-1.05,.29],[-.45,-.5,.31]]);
+    add('#e0bd77',[[-.35,-.4,.35],[.4,-.4,.35],[.46,-.52,.34],[.44,-1.02,.32],[-.37,-1.01,.32],[-.4,-.52,.34]]);
+    add('#665233',[[-.23,-.67,.355],[.29,-.67,.355],[.29,-.72,.355],[-.23,-.72,.355]]);
+    add('#9c7a44',[[-.23,-.8,.35],[.15,-.8,.35],[.15,-.84,.35],[-.23,-.84,.35]]);
+  }else{
+    for(const side of [-1,1]){
+      const wing=points=>points.map(([u,v,w])=>[side*u,v,w]);
+      add('#574353',wing([[0,.07,.07],[.42,.79,.28],[.9,.87,.53],[.82,.34,.51],[.4,.12,.3]]));
+      add('#ea9454',wing([[.09,.13,.13],[.46,.68,.31],[.78,.75,.48],[.69,.37,.45],[.36,.18,.29]]));
+      add('#c86955',wing([[.02,.04,.08],[.48,.28,.33],[.67,.04,.41],[.56,-.27,.39],[.24,-.22,.21]]));
+      add('#f7deb0',wing([[.53,.56,.38],[.63,.64,.43],[.6,.52,.42]]));
+    }
+    add('#56444b',[[-.047,-.16,.14],[.045,-.16,.14],[.05,.36,.13],[0,.43,.12],[-.05,.33,.13]]);
+  }
+}
+
+function paintSpecimen(canvas, plant, {potted=false,portrait=true,width=520,height=460,angle=.34,pitch=.28,zoom=1,faces}={}) {
   const ctx=canvas.getContext('2d');canvas.width=width;canvas.height=height;
-  const angle=.34,pitch=.28,ca=Math.cos(angle),sa=Math.sin(angle),cp=Math.cos(pitch),sp=Math.sin(pitch);
+  const ca=Math.cos(angle),sa=Math.sin(angle),cp=Math.cos(pitch),sp=Math.sin(pitch);
   let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
-  const projected=specimenMesh(plant,potted).map(f=>{
+  const projected=(faces??specimenMesh(plant,potted)).map(f=>{
     const p=f.vertices.map(([x,y,z])=>{
       const depth=x*sa+z*ca,px=x*ca-z*sa,py=depth*sp-y*cp;
       minX=Math.min(minX,px);maxX=Math.max(maxX,px);minY=Math.min(minY,py);maxY=Math.max(maxY,py);
@@ -639,7 +735,7 @@ function paintSpecimen(canvas, plant, {potted=false,portrait=true,width=520,heig
     });
     return {p,color:f.color,d:p.reduce((sum,v)=>sum+v[2],0)/p.length};
   }).sort((a,b)=>a.d-b.d);
-  const scale=portrait?Math.min(width*.82/Math.max(.05,maxX-minX),height*.83/Math.max(.05,maxY-minY)):Math.min(width*.46,height*.427);
+  const scale=zoom*(portrait?Math.min(width*.82/Math.max(.05,maxX-minX),height*.83/Math.max(.05,maxY-minY)):Math.min(width*.46,height*.427));
   const left=portrait?width*.5-(maxX+minX)*scale/2:width*.5;
   const bottom=portrait?height*.51-(maxY+minY)*scale/2:height*.89;
   ctx.fillStyle='#66564122';ctx.beginPath();ctx.ellipse(left,bottom+height*.008,scale*(potted?.41:.31),scale*.065,0,0,2*Math.PI);ctx.fill();

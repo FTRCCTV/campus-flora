@@ -41,7 +41,7 @@ async function refinePlant(r){
   })();
   inFlight.set(k,job);if(location.hash==='#garden')renderStudio();try{return await job}finally{inFlight.delete(k);route()}
 }
-let zone='sill', outdoorZone='path', indoorZone='sill',heroIndex=0;
+let zone='sill', outdoorZone='path', indoorZone='sill';
 function esc(value){const el=document.createElement('span');el.textContent=String(value??'');return el.innerHTML}
 function show(html){body.innerHTML=html;if(!modal.open)modal.showModal();modal.scrollTop=0}
 $('close').onclick=()=>modal.close();
@@ -51,7 +51,7 @@ function toast(text){$('toast').textContent=text;clearTimeout(toast.timeout);toa
 function thumbButton(r,action,subtitle){
   const b=document.createElement('button');b.className='starter';
   const image=document.createElement(r.photo?'img':'canvas');
-  if(r.photo){image.src=r.photo;image.alt=''}else portrait(image,r);
+  if(r.photo){image.loading='lazy';image.src=r.photo;image.alt=''}else portrait(image,r);
   const label=document.createElement('div');label.innerHTML='<strong>'+esc(r.name)+'</strong><i>'+esc(r.latin)+'</i><small>'+esc(subtitle||r.family)+'</small>';
   b.append(image,label);b.onclick=action;return b;
 }
@@ -65,20 +65,6 @@ function sample(p,context={}){
   const canvas=document.createElement('canvas');portrait(canvas,p);
   plantEditor([p],canvas.toDataURL('image/png'),true,context);
 }
-function home(){
-  const list=collection.length?collection:[sillExamples[0],plants[0],sillExamples[2],plants[1],plants[2],sillExamples[1]];
-  const hero=list[heroIndex%list.length];
-  paintSpecimen($('heroCanvas'),hero,{potted:true,portrait:true,width:620,height:440});
-  $('heroName').textContent=hero.name;$('heroLatin').textContent=hero.latin;
-  $('heroNote').textContent=collection.length?placementName(hero)+' · '+sizes[hero.size]:hero.note;
-  $('heroPlant').setAttribute('aria-label','查看'+hero.name);$('heroPlant').onclick=()=>collection.length?detail(hero):sample(hero);
-  $('heroNext').hidden=list.length<2;
-  $('homeTitle').textContent=collection.length?'最近的观察':'选一株开始试种';
-  $('homeKicker').textContent=collection.length?'RECENT OBSERVATIONS':'PLANTING LIBRARY';
-  const fieldMarks={'银杏':'扇形叶 · 叶端浅裂','鸡爪槭':'掌状叶 · 尖裂片','垂柳':'细枝下垂 · 狭长叶','雏菊':'白色舌状花 · 黄色花心','薄荷':'叶片对生 · 叶缘有齿','拟石莲花':'莲座排列 · 肥厚叶'};
-  $('atlas').replaceChildren(...list.slice(0,6).map(r=>thumbButton(r,()=>collection.length?detail(r):sample(r),collection.length?placementName(r):fieldMarks[r.name])));
-}
-$('heroNext').onclick=()=>{heroIndex++;home()};
 function selectZone(id){
   zone=id;if(places[id].room)indoorZone=id;else outdoorZone=id;
   renderStudio();
@@ -298,4 +284,5 @@ for(const input of [$('cam'),$('file')])input.onchange=async()=>{
     preview(item.photo,'识别这株植物','<p>将这张照片经植迹在线服务发送至 Pl@ntNet，获取候选物种。</p><button class="primary" id="identify">开始识别</button>');$('identify').onclick=()=>identifyPhoto(item,context);
   }catch{show('<div class="body"><h2>照片读取失败</h2><p>请尝试 JPG、PNG 或 WebP 格式。</p></div>')}
 };
+$('gardenCare').ontoggle=renderGardenCare;$('carePick').onchange=renderGardenCare;
 initStudio();window.addEventListener('hashchange',route);setAccountButton();route();if(!localGardenOnly)void refreshAccount();

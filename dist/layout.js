@@ -27,15 +27,19 @@ const GardenLayout=(()=>{
     const stage=plant.growth??2,form=plant.model?.form||plant.form;
     const water=stage===0||form==='rosette'?1:2;
     const light=stage===2||form==='flower'||form==='rosette'?2:1;
-    return {water,light};
+    return {water,light,nutrient:1};
   }
   function tend(plant,action){
     const stage=plant.growth??2;
     if(stage===3&&action==='harvest'){plant.growth=4;return}
-    const goals=carePlan(plant),care={water:0,light:0,...plant.care};
+    if(stage>=3&&['water','nutrient'].includes(action)){
+      plant.careCount=Math.min(1000000,(plant.careCount||0)+1);return;
+    }
+    const goals=carePlan(plant),care={water:0,light:0,nutrient:0,...plant.care};
     if(stage>=3||!Object.hasOwn(goals,action)||care[action]>=goals[action])throw Error('这项照料已完成。');
     care[action]++;
-    if(care.water>=goals.water&&care.light>=goals.light){
+    plant.careCount=Math.min(1000000,(plant.careCount||0)+1);
+    if(Object.keys(goals).every(key=>care[key]>=goals[key])){
       plant.growth=stage+1;delete plant.care;
     }else plant.care=care;
   }
@@ -178,7 +182,8 @@ const GardenLayout=(()=>{
       band.minZ=Math.min(band.minZ,z);band.maxZ=Math.max(band.maxZ,z);
     }
     let top=0;
-    for(const {vertices} of faces){
+    for(const {vertices,accessory} of faces){
+      if(accessory)continue;
       for(let k=0;k<vertices.length;k++){
         const a=vertices[k],b=vertices[(k+1)%vertices.length];
         top=Math.max(top,a[1]);
@@ -262,6 +267,8 @@ const GardenLayout=(()=>{
       if(p.x==null&&p.z==null&&!decor){if(!Number.isInteger(p.slot)||p.slot<0||p.slot>2000)return false}
       else if(![p.x,p.z].every(v=>Number.isFinite(v)&&Math.abs(v)<=160))return false;
       if(decor&&p.scale!==undefined&&(!Number.isFinite(p.scale)||p.scale<.5||p.scale>2))return false;
+      if(!decor&&((p.potSticker!==undefined&&!['none','daisy','stars','waves'].includes(p.potSticker))||
+        (p.plantCharm!==undefined&&!['none','ribbon','tag','butterfly'].includes(p.plantCharm))))return false;
       if(!decor&&p.potStyle!==undefined&&!['clay','celadon','basalt'].includes(p.potStyle))return false;
       if(p.rotation!==undefined&&(!Number.isFinite(p.rotation)||Math.abs(p.rotation)>Math.PI*2))return false;
       const positioned=located(p);

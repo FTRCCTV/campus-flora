@@ -28,6 +28,7 @@ test('water and light survive a save, require separate actions, and end in harve
   assert.throws(()=>layout.tend(p,'water'));
   const saved=JSON.parse(JSON.stringify(p));layout.tend(saved,'light');
   assert.equal(saved.care.light,1);layout.tend(saved,'light');
+  assert.equal(saved.growth,0);layout.tend(saved,'nutrient');
   assert.equal(saved.growth,1);assert.equal(saved.care,undefined);
   while(saved.growth<3){
     const goals=layout.carePlan(saved);

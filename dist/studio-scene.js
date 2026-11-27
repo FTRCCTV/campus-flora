@@ -4,11 +4,14 @@ const studioPlantMeshes=new Map();
 function studioIndoor(zone){return ['sill','bench','shelf'].includes(zone)}
 function studioPlantAsset(item,zone){
   const indoor=studioIndoor(zone);
-  const key=JSON.stringify([indoor,item.growth,item.latin,item.family,item.size,item.form,item.model,item.palette,item.potStyle]);
+  const key=JSON.stringify([indoor,item.growth,item.latin,item.family,item.size,item.form,item.model,item.palette,item.potStyle,item.potSticker,item.plantCharm]);
   if(studioPlantMeshes.has(key))return studioPlantMeshes.get(key);
   const faces=specimenMesh(item,indoor);
   let radius=0;
-  for(const face of faces)for(const [x,,z] of face.vertices)radius=Math.max(radius,Math.hypot(x,z));
+  for(const face of faces){
+    if(face.accessory)continue;
+    for(const [x,,z] of face.vertices)radius=Math.max(radius,Math.hypot(x,z));
+  }
   const asset={faces,radius};
   if(studioPlantMeshes.size>=64)studioPlantMeshes.delete(studioPlantMeshes.keys().next().value);
   studioPlantMeshes.set(key,asset);

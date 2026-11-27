@@ -68,7 +68,7 @@ function renderStudio(){
     for(const p of studio.items)picker.add(new Option(p.kind?GardenLayout.props[p.kind]:p.name,p.uid));
     picker.value=studio.selected||'';studioSelectionTools();renderDecorCards();
   }
-  scheduleStudio();
+  renderGardenCare();scheduleStudio();
 }
 function renderDecorCards(){
   const select=$('propChoice'),grid=$('decorCards');

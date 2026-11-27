@@ -1,6 +1,6 @@
 import {currentUser,authJson,nameKey,authQuota} from './auth.mjs';
 
-const displayFields=['name','latin','family','form','size','zone','slot','x','z','rotation','potStyle','growth','generation'];
+const displayFields=['name','latin','family','form','size','zone','slot','x','z','rotation','potStyle','potSticker','plantCharm','growth','generation'];
 const modelFields=['form','leaf','bloom','height','spread','count','leafShape','crownShape','petals','arrangement','inflorescence','leafAspect','margin','profileVersion','fact'];
 export function sharedPlant(plant){
   const entry=Object.fromEntries(displayFields.filter(k=>['string','number'].includes(typeof plant[k])).map(k=>[k,plant[k]]));

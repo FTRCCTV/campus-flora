@@ -96,6 +96,7 @@ function renderDuel(){
     b.title=ButterflyDuel.coord(i)+(tile?' · '+(tile.owner+1)+'P '+tile.name:'')+(butterfly?' · 蝴蝶':'');
     b.setAttribute('aria-label',b.title);b.disabled=!play;
   }
+  updateDuelView(s,room,play,card,cards,glide);
   if(glide&&!matchMedia('(prefers-reduced-motion:reduce)').matches){
     const from=grid.children[prior].getBoundingClientRect(),to=grid.children[s.pos].getBoundingClientRect();
     grid.children[s.pos].lastChild.animate([{transform:'translate('+(from.x-to.x)+'px,'+(from.y-to.y)+'px)'},{transform:'translate(0,0)'}],{duration:450,easing:'ease-out'});
@@ -153,6 +154,7 @@ async function duelMode(online){
   }catch(e){if(ticket===duelState.ticket)duelMsg(e.message)}
 }
 function initDuel(){
+  initDuelView();
   for(let i=0;i<25;i++){
     const b=document.createElement('button');b.type='button';b.append(document.createElement('small'),document.createElement('span'));
     b.onclick=()=>duelPlay(false,i);$('duelBoard').append(b);

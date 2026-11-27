@@ -6,59 +6,72 @@ const nurseryStages=[
   ['种子成熟','收进种子袋','保存这个品种，以后可以反复播种，也能分享给花友。'],
   ['已留种','打开种子袋','种子已收好，母株会继续留在花园里。']
 ];
-function renderPlantCare(plant){
-  const panel=$('carePanel'),stage=plant.growth??2,[label,action,hint]=nurseryStages[stage];
-  const owner=studioOwner(),blocked=!!activeStudioDraft();
-  panel.className='nurseryPanel';
-  panel.innerHTML='<div class="nurseryHeading"><h3>生长手记</h3><span id="careGeneration"></span></div><canvas class="carePortrait" aria-label="当前生长阶段的植物模型"></canvas><div class="growthTrack"></div><p class="careHint"></p><div class="careMeters"></div><div class="careActions"></div><p role="status" class="careStatus"></p>';
-  panel.querySelector('#careGeneration').textContent='第 '+(plant.generation??1)+' 代'+(plant.seedFrom?' · 来自 '+plant.seedFrom:'');
-  paintPot(panel.querySelector('canvas'),plant);
-  const track=panel.querySelector('.growthTrack');
-  nurseryStages.forEach(([name],index)=>{
-    const tag=document.createElement('span');tag.textContent=name;
-    if(index===stage)tag.setAttribute('aria-current','step');
-    if(index<=stage)tag.className='reached';track.append(tag);
+const careNames={water:'水分',light:'光照',nutrient:'养分'};
+const careVerbs={water:'浇水',light:'转盆向光',nutrient:'施肥'};
+function growthSummary(plant){
+  const stage=plant.growth??2,goals=GardenLayout.carePlan(plant),care={water:0,light:0,nutrient:0,...plant.care};
+  const keys=Object.keys(goals),progress=keys.reduce((n,k)=>n+Math.min(goals[k],care[k]),0)/keys.reduce((n,k)=>n+goals[k],0);
+  return {stage,goals,care,percent:stage>=3?100:Math.round((stage+progress)/3*100)};
+}
+async function careForPlant(plant,kind,owner){
+  const snapshot=growthSummary(plant);
+  await writeGarden((records,design)=>{
+    if(!owner||owner!==studioOwner()||visitingGarden||activeStudioDraft())throw Error('花园已切换或正在布置，请重新选择。');
+    const current=records.find(p=>p.uid===plant.uid);
+    if(!current||current.latin!==plant.latin||(current.growth??2)!==snapshot.stage||
+       Object.keys(careNames).some(k=>(current.care?.[k]||0)!==snapshot.care[k]))throw Error('植株已有更新，请重新选择。');
+    GardenLayout.tend(current,kind);
+    if((current.growth??2)>snapshot.stage){
+      const other=GardenLayout.blocker(GardenLayout.located(current),records.concat(design.decorations));
+      if(other)throw Error('长大后会碰到「'+(other.name||GardenLayout.props[other.kind])+'」，请先留出空间。');
+    }
   });
-  panel.querySelector('.careHint').textContent=blocked?'完成或取消当前布置后，即可照料植株。':hint;
-  const meters=panel.querySelector('.careMeters'),buttons=panel.querySelector('.careActions'),status=panel.querySelector('.careStatus');
-  const goals=GardenLayout.carePlan(plant),care={water:0,light:0,...plant.care};
-  function meter(title,value,max,unit){
+}
+function renderPlantCare(plant,panel=$('carePanel'),compact=false){
+  const {stage,goals,care,percent}=growthSummary(plant),owner=studioOwner(),blocked=!!activeStudioDraft()||!owner||!!visitingGarden;
+  panel.className='nurseryPanel'+(compact?' compactCare':'');
+  panel.innerHTML='<div class="nurseryHeading"><h3></h3><small></small></div><div class="growthTrack"></div><div class="careMeters"></div><div class="careActions"></div><p role="status" class="careStatus"></p>';
+  panel.querySelector('h3').textContent=compact?plant.name+' · '+nurseryStages[stage][0]:'生长手记';
+  panel.querySelector('small').textContent='第 '+(plant.generation??1)+' 代 · 已记录照料 '+(plant.careCount||0)+' 次'+(plant.seedFrom?' · 来自 '+plant.seedFrom:'');
+  if(!compact){const art=document.createElement('canvas');art.className='carePortrait';art.setAttribute('aria-label','当前生长阶段');panel.querySelector('.growthTrack').before(art);paintPot(art,plant)}
+  const track=panel.querySelector('.growthTrack');
+  for(const [i,[name]] of nurseryStages.entries()){
+    const tag=document.createElement('span');tag.textContent=name;if(i<=stage)tag.className='reached';
+    if(i===stage)tag.setAttribute('aria-current','step');track.append(tag);
+  }
+  function meter(name,value,max,unit){
     const line=document.createElement('label'),bar=document.createElement('progress');
-    line.textContent=title+' '+value+unit;bar.max=max;bar.value=value;line.append(bar);meters.append(line);
+    line.textContent=name+' '+value+unit;bar.max=max;bar.value=value;line.append(bar);panel.querySelector('.careMeters').append(line);
   }
-  const fraction=(Math.min(care.water,goals.water)+Math.min(care.light,goals.light))/(goals.water+goals.light);
-  meter('总成长',stage>=3?100:Math.round((stage+fraction)/3*100),100,'%');
-  if(stage<3){
-    panel.querySelector('.careHint').textContent=blocked?'完成或取消当前布置后，即可照料植株。':'完成本阶段的水分和光照目标，即可进入「'+nurseryStages[stage+1][0]+'」。';
-    meter('水分',care.water,goals.water,' / '+goals.water);meter('光照',care.light,goals.light,' / '+goals.light);
-    button('浇水 +1','water',care.water>=goals.water);button('转盆向光 +1','light',care.light>=goals.light);
-  }else button(action,'harvest',false);
-  function button(text,kind,done){
-    const btn=document.createElement('button');btn.className='light careAction';
-    btn.textContent=done?text.split(' ')[0]+' ✓':text;btn.disabled=blocked||!owner||done;
-    btn.onclick=()=>apply(kind);buttons.append(btn);
+  meter('总成长',percent,100,'%');
+  if(stage<3)for(const k of Object.keys(goals))meter(careNames[k],care[k],goals[k],' / '+goals[k]);
+  const status=panel.querySelector('.careStatus'),buttons=panel.querySelector('.careActions');
+  if(blocked)status.textContent='保存或取消布置后可以照料。';
+  else if(stage>=3)status.textContent='植株已成熟，浇水和施肥会记入照料次数。';
+  for(const k of (stage<3?Object.keys(goals):['water','nutrient',stage===3?'harvest':'pocket'])){
+    const b=document.createElement('button'),done=stage<3&&care[k]>=goals[k];b.type='button';b.className='light careAction';b.dataset.care=k;
+    b.textContent=(careVerbs[k]||nurseryStages[stage][1])+(done?' ✓':'');b.disabled=blocked||done;
+    b.onclick=async()=>{
+      if(k==='pocket'){openSeedPocket();return}
+      const usable=[...buttons.children].filter(el=>!el.disabled);usable.forEach(el=>el.disabled=true);
+      try{
+        await careForPlant(plant,k,owner);
+        if(owner!==studioOwner())return;
+        route();const updated=readGarden().find(p=>p.uid===plant.uid);
+        if(!compact&&panel.isConnected&&modal.open&&updated)detail(localPlantTraits(updated));
+        const message=k==='harvest'?'种子已收入种子袋。':(updated?.growth??2)>stage?plant.name+'进入「'+nurseryStages[stage+1][0]+'」阶段。':plant.name+'已完成'+careVerbs[k]+'。';
+        toast(message);
+      }catch(e){if(panel.isConnected){status.textContent=e.message;usable.forEach(el=>el.disabled=false)}}
+    };buttons.append(b);
   }
-  async function apply(kind){
-    if(stage===4){openSeedPocket();return}
-    const usable=[...buttons.children].filter(b=>!b.disabled);usable.forEach(b=>b.disabled=true);
-    try{
-      await writeGarden((records,design)=>{
-        if(owner!==studioOwner()||activeStudioDraft())throw Error('花园已切换，请重新打开植株。');
-        const current=records.find(p=>p.uid===plant.uid);
-        if(!current||(current.growth??2)!==stage)throw Error('植物状态有更新，请重新打开。');
-        if((current.care?.water??0)!==care.water||(current.care?.light??0)!==care.light)throw Error('照料记录已更新，请重新打开植株。');
-        GardenLayout.tend(current,kind);
-        if(current.growth!==plant.growth){
-          const other=GardenLayout.blocker(GardenLayout.located(current),records.concat(design.decorations));
-          if(other)throw Error('长大后会碰到「'+(other.name||GardenLayout.props[other.kind])+'」，请先在布置里为它留出空间。');
-        }
-      });
-      if(!panel.isConnected||!modal.open||owner!==studioOwner())return;
-      route();const updated=readGarden().find(p=>p.uid===plant.uid);
-      if(updated)detail(localPlantTraits(updated));
-      toast(stage===3?'已收入种子袋，可以自己播种或赠予花友。':(updated?.growth??2)>stage?plant.name+'进入「'+nurseryStages[stage+1][0]+'」阶段。':kind==='water'?'已浇水，水分 +1。':'已转盆，光照 +1。');
-    }catch(e){if(panel.isConnected){status.textContent=e.message;usable.forEach(b=>b.disabled=false)}}
-  }
+}
+function renderGardenCare(){
+  const sheet=$('gardenCare'),select=$('carePick'),list=visitingGarden?[]:readGarden();
+  sheet.hidden=!studioOwner()||!list.length||!!visitingGarden;if(sheet.hidden||!sheet.open)return;
+  const selected=select.value;
+  select.replaceChildren(...list.map(p=>new Option(p.name+' · '+placementName(p),p.uid)));
+  select.value=list.some(p=>p.uid===selected)?selected:(list.find(p=>p.zone===zone)||list[0]).uid;
+  const plant=list.find(p=>p.uid===select.value);if(plant)renderPlantCare(localPlantTraits(plant),$('gardenCareBody'),true);
 }
 function openSeedPocket(){
   const owner=studioOwner();if(!owner||visitingGarden)return;
