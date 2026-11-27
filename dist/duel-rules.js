@@ -1,0 +1,101 @@
+// The browser uses this engine for same-device games; the Worker owns online turns.
+const ButterflyDuel=(()=>{
+  const sides=['下边','右边'];
+  const types={
+    plain:['占地','在空格种下阻挡。'],
+    nectar:['花引','花丛可通行。蝴蝶在等长路线中优先飞入相邻花丛，触发一次。'],
+    wind:['风播','留下可通行的风种。蝴蝶从这里起飞时，在等长路线中优先朝你的得分边飞一次。'],
+    vine:['蔓生','种下阻挡，并向右（1P）或向下（2P）延伸一格；延伸处须为空。'],
+    breaker:['破障','选一个已有硬阻挡，破开这一格，使其重新可通行。']
+  };
+  const basic={key:'basic',name:'草籽',type:'plain'},tool={key:'trial',name:'破土根 · 体验卡',type:'breaker'};
+  const hard=t=>t?.type==='plain'||t?.type==='vine';
+  function neighbors(c){
+    const n=[];
+    if(c%5<4)n.push(c+1);
+    if(c<20)n.push(c+5);
+    if(c%5)n.push(c-1);
+    if(c>4)n.push(c-5);
+    return n;
+  }
+  function create(){
+    return {cells:Array(25).fill(null),pos:0,round:1,turn:0,actions:0,winner:null,
+      plan:[],last:['蝴蝶从 A1 出发。'],trial:[true,true],cool:[{},{}],trail:[0]};
+  }
+  const coord=c=>'ABCDE'[c%5]+(1+Math.floor(c/5));
+  function paths(s){
+    const dist=Array(25).fill(-1),count=Array(25).fill(0),queue=[];
+    if(!hard(s.cells[24])){dist[24]=0;count[24]=1;queue.push(24)}
+    for(let i=0;i<queue.length;i++){
+      const c=queue[i];
+      for(const n of neighbors(c)){
+        if(hard(s.cells[n])&&n!==s.pos)continue;
+        if(dist[n]===-1){dist[n]=dist[c]+1;queue.push(n)}
+        if(dist[n]===dist[c]+1)count[n]+=count[c];
+      }
+    }
+    return {dist,count};
+  }
+  function pick(list,weights,random){
+    let r=random()*list.reduce((sum,c)=>sum+weights(c),0);
+    for(const c of list){r-=weights(c);if(r<0)return c}
+    return list.at(-1);
+  }
+  function fly(s,random){
+    const {dist,count}=paths(s),from=s.pos;
+    let next,msg='';
+    if(dist[from]<0){
+      const adjacent=neighbors(from),open=adjacent.filter(c=>!hard(s.cells[c]));
+      next=pick(open.length?open:adjacent,()=>1,random);s.plan=[];
+      msg=open.length?'终点路线被封，蝴蝶随机游走':'四周全封，蝴蝶随机越障一格';
+    }else{
+      const options=c=>neighbors(c).filter(n=>dist[n]===dist[c]-1);
+      const choices=options(from),flowers=choices.filter(n=>s.cells[n]?.type==='nectar');
+      const wind=s.cells[from]?.type==='wind'?s.cells[from]:null;
+      const blown=wind?from+(wind.owner===0?5:1):-1;
+      const candidates=flowers.length?flowers:wind&&choices.includes(blown)?[blown]:choices;
+      if(wind)s.cells[from]=null;
+      const valid=s.plan.length===dist[from]&&candidates.includes(s.plan[0])&&
+        s.plan.every((n,i)=>options(i?s.plan[i-1]:from).includes(n));
+      if(!valid){
+        s.plan=[pick(candidates,c=>count[c],random)];
+        while(s.plan.at(-1)!==24)s.plan.push(pick(options(s.plan.at(-1)),c=>count[c],random));
+      }
+      next=s.plan.shift();
+      msg=flowers.length?'花香引路':wind&&next===blown?'风种引路':next<from?'沿最短路绕行':'沿最短路飞行';
+    }
+    if(s.cells[next]?.type==='nectar')s.cells[next]=null;
+    s.pos=next;s.trail=[...s.trail.slice(-23),next];s.last.push(msg+' · '+coord(from)+' → '+coord(next));
+    if(next>=20||next%5===4)s.winner=next>=20?0:1;
+  }
+  function check(s,card,cell){
+    if(s.winner!==null)throw Error('这局已经结束。');
+    if(!card)return;
+    if(!Object.hasOwn(types,card.type)||!Number.isInteger(cell)||cell<0||cell>=25||cell===s.pos)throw Error('请选择蝴蝶以外的棋格。');
+    if(card.key===tool.key&&!s.trial[s.turn])throw Error('本局体验卡已使用。');
+    if(card.key!==tool.key&&(s.cool[s.turn][card.type]||0)>s.round)throw Error('该体系下轮恢复。');
+    if(card.type==='breaker'?!hard(s.cells[cell]):!!s.cells[cell])throw Error(card.type==='breaker'?'破障需要选中一个实体阻挡。':'这格已经有植物了。');
+  }
+  function play(s,card,cell,random=Math.random){
+    check(s,card,cell);
+    const p=s.turn;
+    if(s.actions===0)s.last=[];
+    if(card){
+      const tile={type:card.type,name:card.name,owner:p};
+      s.cells[cell]=card.type==='breaker'?null:tile;
+      if(card.type==='vine'){
+        const n=cell+(p===0?1:5);
+        if(neighbors(cell).includes(n)&&n!==s.pos&&!s.cells[n])s.cells[n]={...tile};
+      }
+      if(card.key===tool.key)s.trial[p]=false;
+      else if(card.type!=='plain')s.cool[p][card.type]=s.round+2;
+      s.last.push((p+1)+'P '+card.name+' · '+coord(cell));
+    }else s.last.push((p+1)+'P 跳过栽种');
+    if(++s.actions===2){
+      fly(s,random);s.actions=0;
+      if(s.winner===null){s.round++;s.turn=(s.round-1)%2}
+    }else s.turn=1-p;
+  }
+  return {types,sides,basic,tool,hard,coord,create,check,play,paths,fly};
+})();
+globalThis.ButterflyDuel=ButterflyDuel;

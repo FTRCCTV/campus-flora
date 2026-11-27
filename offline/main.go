@@ -23,7 +23,7 @@ import (
 var page []byte
 
 const service = "https://cau-campus-flora-notebook.bubblybox131.chatgpt.site"
-const appVersion = "campus-flora-local/0.6.0"
+const appVersion = "campus-flora-local/0.7.0"
 
 func problem(w http.ResponseWriter, status int, message string) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -102,7 +102,7 @@ func localApp(host string) http.HandlerFunc {
 			_, _ = w.Write(html)
 		case "/api/identify":
 			forward(w, r, client, "image/jpeg", 4000000)
-		case "/api/model":
+		case "/api/model", "/api/faction":
 			forward(w, r, client, "application/json", 4096)
 		default:
 			http.NotFound(w, r)

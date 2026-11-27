@@ -87,8 +87,10 @@ for(const [id,place] of Object.entries(places)){
   const b=document.createElement('button');b.dataset.zone=id;b.textContent=place.name;b.onclick=()=>selectZone(id);$('zones').append(b);
 }
 function route(){
-  const garden=location.hash==='#garden';$('explore').hidden=garden;$('garden').hidden=!garden;
-  $('ne').classList.toggle('active',!garden);$('ng').classList.toggle('active',garden);
+  const garden=location.hash==='#garden',dueling=location.hash==='#duel';
+  $('duel').hidden=!dueling;$('nd').classList.toggle('active',dueling);
+  $('explore').hidden=garden||dueling;$('garden').hidden=!garden;
+  $('ne').classList.toggle('active',!garden&&!dueling);$('ng').classList.toggle('active',garden);
   if(!garden||visitingGarden?.owner!==gardenAccount.user?.id)visitingGarden=null;
   const visiting=!!visitingGarden;
   $('gardenTitle').textContent=visiting?visitingGarden.name+'的植物园':'我的植物园';
@@ -98,6 +100,7 @@ function route(){
   illustrated=!visiting&&!collection.length&&!readDesign().decorations.length;if(!visiting)$('qty').textContent=collection.length;
   document.body.dataset.atmosphere=readDesign().effect||'none';
   $('seedPocket').hidden=visiting;
+  if(dueling){openDuel();return}leaveDuel();
   if(!garden){home();return}renderStudio();schedulePaletteUpgrade();
   $('records').replaceChildren(...collection.map(r=>thumbButton(r,()=>visiting?sharedDetail(r):detail(r),placementName(r)+' · '+sizes[r.size])));
   if(visiting&&!collection.length)$('records').textContent='这位花友还没有种下植物。';
@@ -106,7 +109,7 @@ function route(){
 window.addEventListener('storage',e=>{if(e.key===gardenKey||e.key===null)route()});
 function detail(r){
   show('<img class="detailArt" alt="观察记录"><div class="body"><div class="eyebrow">'+(r.seedFrom?'花友种子':r.gift?'花友分株':r.generation>1?'自留种子':r.demo?'图鉴示例':'校园观察')+'</div><h2>'+esc(r.name)+'</h2><i>'+esc(r.latin)+'</i><p>'+esc(r.family||'')+'</p><h3>植物小科普</h3><p id="detailFact">'+esc(plantFact(r))+'</p><div class="traitChips" id="detailTraits">'+traitChips(r)+'</div><div class="recinfo">'+esc(r.date)+' · '+esc(r.location||'未填写发现地点')+'</div><p>'+esc(placementName(r))+' · '+sizes[r.size]+' · '+habits[r.form]+'</p><div id="carePanel"></div><div class="management"><button id="move">调整体型与位置</button><button id="replace">替换植物</button><button class="danger" id="remove">移除</button></div><p class="modelnote" id="modelStatus"></p></div>');
-  body.querySelector('img').src=r.photo;renderPlantCare(r);
+  body.querySelector('img').src=r.photo;renderPlantCare(r);showDuelTrait(r);
   $('move').onclick=()=>plantEditor([r],r.photo,r.demo,{editUid:r.uid,previous:r});
   $('replace').onclick=()=>library({replaceUid:r.uid,previous:r,zone:r.zone});
   $('remove').onclick=()=>{

@@ -65,6 +65,8 @@ async function commitStudioDraft(){
     if(studioDraft===d){
       studioDraft=null;studio.mode='view';studio.selected=null;
       const before=d.baseDesign.discovered?.length||0,after=readDesign().discovered?.length||0;
+      const fresh=(readDesign().discovered||[]).filter(key=>!(d.baseDesign.discovered||[]).includes(key));
+      void classifyDiscoveries(fresh);
       const earned=GardenLayout.rewards.filter(r=>r.at>before&&r.at<=after);
       toast(earned.length?'收集达到 '+after+' 种，已解锁「'+earned.map(r=>r.label).join('」「')+'」！':after>before?'新物种已记入手记，累计 '+after+' 种。':d.owner==='local'?'布置已保存在本机。':'布置已同步到账号。');
     }
