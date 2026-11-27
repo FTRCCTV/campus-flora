@@ -41,6 +41,50 @@ function drawHabitat({zone,scene,weather,extent,angle,face,box,pillar,ring,recta
       for(let i=0;i<b.length;i++){const k=(i+1)%b.length;face([a[i],a[k],b[k],b[i]],leaves[(i+1)%3]);face([b[i],b[k],[px-.04,cy+r*.82,pz]],leaves[1+i%3])}
     }
   }
+  // Six engraved characters on an original campus name wall. The strokes are
+  // coplanar convex quads so they pick up the same camera and depth as the stone.
+  function campusNameWall(cx,z){
+    const w=Math.min(3.04,extent*.94),stone=['#a39479','#b7a98c','#c9bc9f','#e3d7b9'];
+    box(cx,.005,z,w+.12,.17,.42,slate);
+    box(cx,.175,z,w,.75,.23,stone);
+    box(cx,.925,z,w+.08,.085,.28,snow?chalk:stone);
+    const front=z+.117,letters=[
+      [[1,2.5,1,7.5],[1,2.5,8.8,2.5,8.8,7.5],[1,7,8.8,7],[5,.4,5,9.7]], // 中
+      [[.7,.7,.7,9.4],[.7,.7,9,.7,9,9.4],[.7,9,9,9],[2.2,2.7,7.6,2.7],[4.8,2.7,4.8,7.2],[2.6,4.9,7,4.9],[2.1,7.2,7.9,7.2],[6.4,5.7,7.5,6.6]], // 国
+      [[1,3.7,1.4,2.1,9.2,2.1,8.4,3.6],[5.6,.3,5,2.6,3.4,4.8,1.1,6.3],[3.9,4.5,3.9,9.1,6.1,7.6],[5.1,3.5,6.1,5.9,7.4,7.7,9.6,9],[8.7,4.3,6.7,6]], // 农
+      [[3.3,.55,3.3,8.7],[6.4,.55,6.4,8.7],[.9,3.4,2.4,6.5],[9,3.3,7.5,6.5],[.4,9,9.6,9]], // 业
+      [[.6,3.6,9.4,3.6],[5.2,.45,5,3.8,4.4,5.9,3,7.8,.7,9.3],[5,3.9,6,6.2,7.6,8,9.4,9.2]], // 大
+      [[1.8,.7,2.8,2.1],[4.3,.4,5.1,1.9],[7.9,.5,6.7,2.2],[.8,4.1,1,2.8,9,2.8,8.7,4.2],[2.7,4.7,7.2,4.7,5.2,6.1],[5.2,6.1,5.2,8.9,4.7,9.4,3.4,9.1],[.6,6.9,9.4,6.9]] // 学
+    ];
+    const cell=w*.144,font=cell*.86,stroke=.053*font,ink='#673731';
+    letters.forEach((glyph,index)=>{
+      const left=cx+(index-2.5)*cell-font*.5;
+      for(const points of glyph)for(let j=2;j<points.length;j+=2){
+        const x1=left+points[j-2]*font/10,y1=.57+font*(.5-points[j-1]/10);
+        const x2=left+points[j]*font/10,y2=.57+font*(.5-points[j+1]/10);
+        const len=Math.hypot(x2-x1,y2-y1),dx=(y2-y1)*stroke/len,dy=(x1-x2)*stroke/len;
+        face([[x1-dx,y1-dy,front],[x2-dx,y2-dy,front],[x2+dx,y2+dy,front],[x1+dx,y1+dy,front]],ink);
+      }
+    });
+  }
+  function trialWheat(){
+    const x=-extent-.34,z=-edge*.16,depth=2.24;
+    box(x,0,z,.50,.15,depth,oak);
+    face(rectangle(x,.154,z,.43,depth-.09),snow?'#e0e3ce':'#716246');
+    for(const row of [-1,1])for(let i=0;i<8;i++){
+      const px=x+row*.114,pz=z-.91+i*.25+row*.035,h=.54+.10*Math.sin(i*2.3+row),bend=.034*Math.sin(i+row);
+      const base=.16,left=px+bend,stem='#738545',grain=snow?'#e1d8ac':wet?'#b39e55':'#d7af4c';
+      face([[px-.012,base,pz],[px+.012,base,pz],[left+.011,h+.03,pz],[left-.011,h+.03,pz]],stem);
+      for(const s of [-1,1]){
+        face([[px,base+.075,pz],[px+s*.07,base+.15,pz+s*.055],
+          [px+s*.096,base+.25,pz+s*.11],[px+s*.03,base+.19,pz+s*.025]],s<0?'#7c8d49':'#91a15f');
+        for(let k=0;k<3;k++){
+          const y=h+k*.047,tip=left+s*(.056-k*.008);
+          face([[left,y,pz],[tip,y+.049,pz+s*.009],[tip+s*.017,y+.106,pz],[left,y+.045,pz]],grain);
+        }
+      }
+    }
+  }
   if(inside){
     const desk=zone==='bench',archive=zone==='shelf';
     const panel=desk?['#586c6a','#6a807c','#708780','#93a59a']:archive?['#846249','#947152','#a17b5d','#bb9572']:green;
@@ -318,6 +362,9 @@ function drawHabitat({zone,scene,weather,extent,angle,face,box,pillar,ring,recta
     if(zone==='pond'){
       face(ring(-edge*.43,.015,rear,Math.min(1.62,edge*.43),.41,18),'#6da098');
       for(let i=0;i<5;i++)face(ring(-edge*.65+i*.24,.027,rear+.15*Math.sin(i),.09,.07,7),'#97a96f');
+    }else if(scene==='campus'){
+      campusNameWall(-edge*.43,rear+.055);
+      trialWheat();
     }else{
       for(let k=0;k<5;k++)pillar(-edge+(.10+.11*k)*edge,.02,rear,.055,.055,.55,walnut,6);
       box(-edge*.67,.32,rear,edge*.46,.045,.065,oak);

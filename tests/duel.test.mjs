@@ -66,9 +66,16 @@ test('two authenticated friends invite, join, reconnect, use collected cards, an
     const r=await duelApi(new Request('https://test/api/duel?friend=test',{method:body?'POST':'GET',headers:{Origin:'https://test',Cookie:'__Host-flora_session='+tokens[i]},...(body?{body:JSON.stringify(body)}:{})}),env);
     return {status:r.status,...await r.json()};
   }
-  let room=(await call(0,{action:'invite',match:null,rev:0})).room;
+  for(const deck of [{wind:'not owned'},{vine:'acer palmatum'},{wind:'standard-nectar'}]){
+    assert.equal((await call(0,{action:'invite',match:null,rev:0,deck})).status,400);
+  }
+  let room=(await call(0,{action:'invite',match:null,rev:0,deck:{wind:'acer palmatum'}})).room;
+  assert.equal(room.deck.length,5);
+  assert.equal(room.deck.find(c=>c.type==='wind').key,'acer palmatum');
   const act=(i,action,extra={})=>call(i,{action,rev:room.rev,match:room.match,...extra});
   assert.equal((await act(0,'join')).status,409);room=(await act(1,'join')).room;
+  assert.equal(room.deck.find(c=>c.type==='wind').key,'standard-wind');
+  assert.equal((await act(0,'play',{key:'standard-wind',cell:1})).status,400);
   assert.equal((await act(1,'play',{key:null})).status,409);
   assert.equal((await act(0,'play',{key:'fake plant',cell:1})).status,400);
   const prev=room.rev;room=(await act(0,'play',{key:'acer palmatum',cell:1,type:'breaker'})).room;

@@ -9,6 +9,7 @@ const ButterflyDuel=(()=>{
     breaker:['破障','选一个已有硬阻挡，破开这一格，使其重新可通行。']
   };
   const basic={key:'basic',name:'草籽',type:'plain'},tool={key:'trial',name:'破土根 · 体验卡',type:'breaker'};
+  const standards=Object.freeze(Object.fromEntries(Object.entries({plain:'冬青',nectar:'波斯菊',wind:'蒲公英',vine:'常春藤',breaker:'竹'}).map(([type,name])=>[type,Object.freeze({type,key:type==='plain'?'basic':'standard-'+type,name:name+'（标准）'})])));
   const hard=t=>t?.type==='plain'||t?.type==='vine';
   function neighbors(c){
     const n=[];
@@ -96,6 +97,6 @@ const ButterflyDuel=(()=>{
       if(s.winner===null){s.round++;s.turn=(s.round-1)%2}
     }else s.turn=1-p;
   }
-  return {types,sides,basic,tool,hard,coord,create,check,play,paths,fly};
+  return {standards,types,sides,basic,tool,hard,coord,create,check,play,paths,fly};
 })();
 globalThis.ButterflyDuel=ButterflyDuel;

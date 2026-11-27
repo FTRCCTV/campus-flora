@@ -29,7 +29,7 @@ function updateDuelView(board,room,canPlay,card,cards,glide){
   }
   $('duelPrompt').textContent=canPlay?(room?'轮到你了。':'同屏交给 '+(board.turn+1)+'P。')+(card.type==='breaker'?' 选择一个实体阻挡。':' 选好植物，再点一个空格。'):
     room?.status==='playing'?(duelState.busy?'正在提交落子…':'等待花友落子。'):room?.status==='waiting'?'双方入局后开始。':board?.winner!=null?'本局已结束。':'选择一位花友开始。';
-  const quick=$('duelQuickCards'),group=[cards[0],cards[1],...cards.slice(2).filter(c=>!c.pending)].filter(Boolean).slice(0,8);
+  const quick=$('duelQuickCards'),group=cards.slice(0,8);
   const signature=JSON.stringify(group.map(c=>[c.key,c.name,c.type]));
   if(quick.dataset.key!==signature){
     quick.dataset.key=signature;quick.replaceChildren(...group.map(c=>{

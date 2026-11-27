@@ -1,0 +1,47 @@
+select[data-flora-choice]{display:none!important}
+button.flora-choice{
+  display:inline-flex;align-items:center;justify-content:space-between;gap:.7em;
+  vertical-align:middle;box-sizing:border-box;min-width:min(7.5em,100%);max-width:100%;
+  min-height:37px;margin:0;padding:3px 4px 3px .75em;
+  border:1px solid #a39f84;border-radius:7px;background:linear-gradient(#fffdf5,#f7f2e2);
+  color:#233f33;font-family:inherit;font-size:.92rem;font-weight:500;line-height:1.35;
+  text-align:start;box-shadow:0 1px 2px #4e482316;cursor:pointer;touch-action:manipulation
+}
+.flora-choice-value{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+button.flora-choice::after{
+  content:"";flex:none;display:block;width:26px;height:26px;border-radius:4px;background-color:#e0e7d5;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 16 16'%3E%3Cpath d='m3 6 5 5 5-5' fill='none' stroke='%23385943' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:center
+}
+button.flora-choice:hover:not(:disabled),button.flora-choice[aria-expanded=true]{border-color:#577654;background:#fffdf3}
+button.flora-choice:focus-visible{outline:3px solid #739d75;outline-offset:2px}
+button.flora-choice[aria-expanded=true]::after{transform:rotate(180deg);background-color:#cbdac2}
+button.flora-choice:disabled{opacity:.65;cursor:default}
+button.flora-choice[hidden]{display:none!important}
+.benchHeading .flora-choice{display:flex;max-width:min(47vw,215px)}
+.duelDesk .flora-choice,.body label .flora-choice,.authForm .flora-choice{display:flex;width:100%;margin-top:4px}
+.studioBar .flora-choice,.gardenCare>label .flora-choice,.benchSwatches .flora-choice{display:flex}
+.duelMobileHand .flora-choice{max-width:71%}
+.flora-choice-list{
+  position:fixed;inset:auto;z-index:2147483646;box-sizing:border-box;
+  max-width:calc(100vw - 16px);margin:0;padding:4px;overflow-x:hidden;overflow-y:auto;
+  overscroll-behavior:contain;border:1px solid #a7a185;border-radius:9px;
+  background:#fffdf4;color:#263f31;box-shadow:0 9px 26px #222d2336;
+  font:500 .94rem/1.4 system-ui,"Microsoft YaHei",sans-serif;text-align:start;
+  scrollbar-width:thin;scrollbar-color:#9cae90 #f6f0df
+}
+.flora-choice-list [role=option]{
+  position:relative;box-sizing:border-box;min-height:36px;padding:8px 29px 8px 10px;border-radius:5px;
+  overflow-wrap:anywhere;cursor:pointer
+}
+.flora-choice-list [role=option][aria-selected=true]{font-weight:650;color:#214d39}
+.flora-choice-list [role=option][aria-selected=true]::after{content:"✓";position:absolute;right:10px;top:8px}
+.flora-choice-list .flora-choice-active,.flora-choice-list [role=option]:hover{background:#e5eddc}
+.flora-choice-list [role=option][aria-disabled=true]{background:transparent;color:#827e6f;cursor:default}
+.flora-choice-heading{padding:6px 10px 1px;color:#696d58;font-size:.78rem;font-weight:650}
+@media(pointer:coarse){button.flora-choice{min-height:42px}.flora-choice-list [role=option]{min-height:43px;padding-top:11px;padding-bottom:11px}}
+@media(forced-colors:active){
+  button.flora-choice, .flora-choice-list{border-color:ButtonText}
+  button.flora-choice::after{content:"⌄";background:none;text-align:center}
+  .flora-choice-list .flora-choice-active{outline:2px solid Highlight;outline-offset:-2px}
+}

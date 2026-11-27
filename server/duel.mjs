@@ -37,7 +37,7 @@ export async function duelFaction(request,env,upstream=fetch){
       if(!pendingFactions.has(key))pendingFactions.set(key,assignFaction(key,env,upstream).finally(()=>pendingFactions.delete(key)));
     }
     return authJson(await pendingFactions.get(key));
-  }catch{return authJson({error:'DeepSeek 暂未完成归类，可先作为普通阻挡出战。'},503)}
+  }catch{return authJson({error:'物种资料暂不可用。'},503)}
 }
 async function duelCard(env,user,key,asPlain){
   if(!key)return null;
@@ -50,10 +50,31 @@ async function duelCard(env,user,key,asPlain){
   const faction=asPlain?null:await env.BUCKET.get(factionKey(key));
   return {key,name:plant?.name||key,type:faction?(await faction.json()).type:'plain'};
 }
+async function lockDuelDeck(env,user,chosen={}){
+  const {standards}=ButterflyDuel;
+  if(!chosen||typeof chosen!=='object'||Array.isArray(chosen)||Object.keys(chosen).some(k=>!Object.hasOwn(standards,k)))throw Error('配卡格式有误。');
+  const deck=[];
+  let garden;
+  for(const [type,standard] of Object.entries(standards)){
+    const key=chosen[type]??standard.key;
+    if(key===standard.key){deck.push(standard);continue}
+    if(typeof key!=='string'||key.length>160||FloraCatalog.speciesKey(key)!==key)throw Error('请选择该体系的植物。');
+    if(!garden){
+      const doc=await env.BUCKET.get('gardens/v1/'+encodeURIComponent(user.id)+'.json');
+      garden=GardenLayout.unpack(doc?await doc.json():[]);
+    }
+    if(!garden.design.discovered.includes(key))throw Error('该植物尚未收入你的图鉴。');
+    const entry=await env.BUCKET.get(factionKey(key));
+    if(!entry||(await entry.json()).type!==type)throw Error('植物与卡槽不匹配，请重新选择。');
+    deck.push({type,key,name:garden.records.find(p=>FloraCatalog.speciesKey(p.latin)===key)?.name||key});
+  }
+  return deck;
+}
 function duelView(room,user){
   if(!room)return null;
   const {plan,...board}=room.board;
-  return {match:room.match,rev:room.rev,seat:room.players.indexOf(user.id),status:room.status,board};
+  const seat=room.players.indexOf(user.id);
+  return {match:room.match,rev:room.rev,seat,status:room.status,deck:room.decks?.[seat]||null,board};
 }
 export async function duelApi(request,env){
   try{
@@ -71,8 +92,10 @@ export async function duelApi(request,env){
     if(!data||data.rev!==(room?.rev??0)||data.match!==(room?.match??null))return authJson({error:'棋盘已更新，请查看最新回合。'},409);
     const other=edge.sender===user.id?edge.recipient:edge.sender;
     if(data.action==='invite'&&(!room||room.status==='done')){
-      room={match:crypto.randomUUID(),rev:0,players:[user.id,other],status:'waiting',board:ButterflyDuel.create()};
+      let deck;try{deck=await lockDuelDeck(env,user,data.deck)}catch(e){return authJson({error:e.message},400)}
+      room={match:crypto.randomUUID(),rev:0,players:[user.id,other],decks:[deck,null],status:'waiting',board:ButterflyDuel.create()};
     }else if(room?.status==='waiting'&&data.action==='join'&&room.players[1]===user.id){
+      if(room.decks){try{room.decks[1]=await lockDuelDeck(env,user,data.deck)}catch(e){return authJson({error:e.message},400)}}
       room.status='playing';
     }else if(room&&data.action==='end'&&room.status!=='done'){
       if(room.status==='playing')room.board.winner=1-room.players.indexOf(user.id);
@@ -80,7 +103,8 @@ export async function duelApi(request,env){
     }else if(room?.status==='playing'&&data.action==='play'&&room.players[room.board.turn]===user.id){
       try{
         if(data.key!==null&&(typeof data.key!=='string'||!data.key||data.key.length>160))throw Error('植物无效。');
-        const card=await duelCard(env,user,data.key,data.asPlain===true);
+        const card=room.decks?room.decks[room.board.turn].find(c=>c.key===data.key):await duelCard(env,user,data.key,data.asPlain===true);
+        if(data.key!==null&&!card)throw Error('本局没有携带这株植物。');
         ButterflyDuel.play(room.board,card,data.cell);
       }catch(e){return authJson({error:e.message},400)}
       if(room.board.winner!==null)room.status='done';

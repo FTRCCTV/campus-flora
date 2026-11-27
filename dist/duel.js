@@ -10,7 +10,7 @@ function savedFaction(key){
 async function classifyDuel(key){
   const saved=savedFaction(key);if(saved)return saved;
   if(!key)throw Error('未确定具体物种，可以作为普通阻挡。');
-  if(fileDemo)throw Error('请使用一键启动版或在线版连接 DeepSeek。');
+  if(fileDemo)throw Error('请使用一键启动版或在线版获取物种资料。');
   if(factionJobs.has(key))return factionJobs.get(key);
   const job=(async()=>{
     const res=await fetch('/api/faction',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({latin:key}),signal:AbortSignal.timeout(36000)});
@@ -20,28 +20,78 @@ async function classifyDuel(key){
   })().finally(()=>factionJobs.delete(key));
   factionJobs.set(key,job);return job;
 }
+const factionRetry=new Map();
 async function classifyDiscoveries(keys){
   if(fileDemo)return;
-  for(const key of keys){try{await classifyDuel(key)}catch{/* Retry from the specimen or battle hand. */}}
-  if(location.hash==='#duel')renderDuel();
+  let updated=false;
+  for(const key of new Set(keys)){
+    if(!key||savedFaction(key)||(factionRetry.get(key)||0)>Date.now())continue;
+    try{await classifyDuel(key);updated=true}catch{factionRetry.set(key,Date.now()+5*60000)}
+  }
+  if(updated&&location.hash==='#duel')renderDuel();
 }
 function showDuelTrait(plant){
-  const key=FloraCatalog.speciesKey(plant.latin),line=document.createElement('p'),btn=document.createElement('button');
-  $('carePanel').before(line);line.after(btn);btn.className='smallBtn';btn.textContent='判定对战体系';
-  function showTrait(value){line.textContent='对战体系 · '+(value?duelTypes[value.type][0]+'。'+value.reason:key?'待判定，当前可用于占地。':'普通占地');btn.hidden=!!value||!key||fileDemo}
-  showTrait(savedFaction(key));btn.onclick=async()=>{btn.disabled=true;try{showTrait(await classifyDuel(key))}catch(e){line.textContent=e.message}finally{btn.disabled=false}};
+  const key=FloraCatalog.speciesKey(plant.latin),line=document.createElement('p');line.hidden=true;
+  $('carePanel').before(line);
+  function show(){const result=savedFaction(key);if(result&&line.isConnected){line.textContent='对战体系 · '+duelTypes[result.type][0];line.hidden=false}}
+  show();if(key&&!savedFaction(key))void classifyDiscoveries([key]).then(show);
 }
 function duelOwner(){return gardenAccount.user?.id||'guest'}
 function duelStorage(){return 'flora.duel.practice.v1.'+duelOwner()}
-function duelCards(){
-  const online=duelState.mode==='online',design=online?gardenAccount.design:readDesign();
-  const plants=online?gardenAccount.records:readGarden(),names=new Map(plants.map(p=>[FloraCatalog.speciesKey(p.latin),p.name]));
-  const cards=[ButterflyDuel.basic,ButterflyDuel.tool];
+const deckSetup={seat:0,picks:[{},{},{}]};
+function deckPool(){
+  const online=duelState.mode==='online',plants=online?gardenAccount.records:readGarden(),design=online?gardenAccount.design:readDesign();
+  const names=new Map(plants.map(p=>[FloraCatalog.speciesKey(p.latin),p.name]));
+  const pool=Object.fromEntries(Object.entries(ButterflyDuel.standards).map(([t,c])=>[t,[c]]));
   for(const key of design?.discovered||[]){
-    const value=savedFaction(key);
-    cards.push({key,name:names.get(key)||key,type:value?.type||'plain',pending:!value});
+    const result=savedFaction(key);
+    if(result||fileDemo)pool[result?.type||'plain'].push({key,name:names.get(key)||key,type:result?.type||'plain'});
   }
-  return online?cards:cards.concat(duelSamples);
+  return pool;
+}
+function deckFor(pool,seat){
+  return Object.values(pool).map(options=>options.find(c=>c.key===deckSetup.picks[seat][options[0].type])||options[1]||options[0]);
+}
+function deckKeys(deck){return Object.fromEntries(deck.map(c=>[c.type,c.key]))}
+function localPlaying(){const s=duelState.local;return !!s&&(!!s.decks||s.actions>0||s.round>1||s.winner!=null)}
+function duelCards(){
+  if(duelState.mode==='online'&&duelState.room?.deck)return duelState.room.deck;
+  const s=duelState.local;
+  if(duelState.mode==='local'&&s?.decks)return s.decks[s.turn];
+  const pool=deckPool();
+  if(duelState.mode==='online'?duelState.room?.status==='playing':localPlaying()){
+    return [ButterflyDuel.basic,ButterflyDuel.tool,...Object.values(pool).flatMap(opts=>opts.slice(1)),...(duelState.mode==='local'?duelSamples:[])];
+  }
+  return deckFor(pool,duelState.mode==='online'?2:deckSetup.seat);
+}
+function renderDeckPrep(){
+  const online=duelState.mode==='online',r=duelState.room,prep=$('duelPrep');
+  const visible=online?(!r||r.status==='done'||r.status==='waiting'&&r.seat===1):!localPlaying();
+  prep.hidden=!visible;
+  const action=$('duelRoomAction');
+  if(online&&visible&&action.parentNode!==prep)prep.append(action);
+  else if((!online||!visible)&&action.parentNode!==$('duelLobby'))$('duelLobby').insertBefore(action,$('duelLink'));
+  action.hidden=!online;
+  const status=$('duelMessage'),journal=document.querySelector('.duelJournal');
+  if(visible&&status.parentNode!==prep)prep.append(status);
+  else if(!visible&&status.parentNode!==journal.parentNode)journal.before(status);
+  const arena=document.querySelector('.duelLayout');
+  arena.hidden=visible;
+  if(!visible)return;
+  const pool=deckPool(),seat=online?2:deckSetup.seat,deck=deckFor(pool,seat);
+  $('prepSeats').hidden=online;$('prepStart').hidden=online;
+  for(const b of $('prepSeats').children)b.setAttribute('aria-pressed',String(+b.dataset.prepSeat===seat));
+  const grid=$('deckSlots'),signature=JSON.stringify([seat,pool,deck.map(c=>c.key)]);
+  if(grid.dataset.key===signature)return;
+  grid.dataset.key=signature;
+  grid.replaceChildren(...deck.map(card=>{
+    const label=document.createElement('label'),title=document.createElement('strong'),hint=document.createElement('small'),select=document.createElement('select');
+    title.textContent=duelGlyph[card.type]+' '+duelTypes[card.type][0];
+    for(const c of pool[card.type])select.add(new Option(c.name,c.key));
+    select.value=card.key;select.setAttribute('aria-label',duelTypes[card.type][0]+'出战植物');
+    select.onchange=()=>{deckSetup.picks[seat][card.type]=select.value;grid.dataset.key='';};
+    hint.textContent=duelTypes[card.type][1];label.append(title,select,hint);return label;
+  }));
 }
 function duelMsg(msg){$('duelMessage').textContent=msg}
 function leaveDuel(){
@@ -52,11 +102,12 @@ function openDuel(){
   const invite=new URL(location.href).searchParams.get('duelFriend');
   const switchOnline=duelState.scope!==duelOwner()&&(!!invite||duelState.mode==='online');
   if(duelState.scope!==duelOwner()){
-    leaveDuel();duelState.scope=duelOwner();duelState.room=null;duelState.friend='';duelState.mode='local';duelMsg('');
+    leaveDuel();deckSetup.picks=[{},{},{}];deckSetup.seat=0;duelState.scope=duelOwner();duelState.room=null;duelState.friend='';duelState.mode='local';duelMsg('');
     try{duelState.local=JSON.parse(sessionStorage.getItem(duelStorage()))}catch{duelState.local=null}
     if(!duelState.local)duelState.local=ButterflyDuel.create();
   }
   if(!$('duelBoard').childElementCount)initDuel();
+  void classifyDiscoveries((gardenAccount.user?gardenAccount.design:readDesign())?.discovered||[]);
   if(switchOnline){void duelMode(true);return}
   renderDuel();
 }
@@ -64,25 +115,25 @@ function renderDuel(){
   const online=duelState.mode==='online',room=duelState.room,s=online?room?.board:duelState.local;
   $('duelLocal').setAttribute('aria-pressed',String(!online));$('duelOnline').setAttribute('aria-pressed',String(online));
   $('duelLobby').hidden=!online;
-  const play=!!s&&s.winner===null&&(!online||room.status==='playing'&&room.seat===s.turn)&&!duelState.busy;
+  renderDeckPrep();
+  const play=(online||localPlaying())&&!!s&&s.winner===null&&(!online||room.status==='playing'&&room.seat===s.turn)&&!duelState.busy;
   const sel=$('duelHand'),previous=sel.value,cards=duelCards();
-  const handKey=JSON.stringify(cards.map(c=>[c.key,c.type,c.pending,c.name]));
-  if(sel.dataset.hand!==handKey){sel.dataset.hand=handKey;sel.replaceChildren(...cards.map(c=>new Option(c.name+' · '+(c.pending?'待归类／占地':duelTypes[c.type][0]),c.key)))}
-  if(cards.some(c=>c.key===previous))sel.value=previous;
+  const handKey=JSON.stringify(cards.map(c=>[c.key,c.type,c.name]));
+  if(sel.dataset.hand!==handKey){sel.dataset.hand=handKey;sel.replaceChildren(...cards.map(c=>new Option(c.name+' · '+duelTypes[c.type][0],c.key)))}
+  sel.value=cards.some(c=>c.key===previous)?previous:cards[0].key;
   const card=cards.find(c=>c.key===sel.value)||cards[0];
   const specimen=(online?gardenAccount.records:readGarden()).find(p=>FloraCatalog.speciesKey(p.latin)===card.key);
   const photo=$('duelPhoto');photo.hidden=!specimen?.photo;
   if(specimen?.photo&&photo.getAttribute('src')!==specimen.photo)photo.src=specimen.photo;
   const cooling=card.key==='trial'&&!s?.trial[s?.turn]?'本局体验卡已使用。':(s?.cool[s.turn][card.type]||0)>s?.round?'该体系本轮休息。':'';
   $('duelAbility').textContent=duelTypes[card.type][1]+' '+cooling;
-  $('duelClass').hidden=!card.pending||fileDemo;$('duelClass').disabled=factionJobs.has(card.key);
   $('duelTurn').textContent=online&&!room?'在线花友对局':online&&room.status==='waiting'?'等待花友入局':online&&room.status==='done'&&s.winner===null?'邀请已取消':
     s.winner!==null?(s.winner+1)+'P 获胜 · '+ButterflyDuel.sides[s.winner]:'第 '+s.round+' 轮 · '+(s.turn+1)+'P 行动';
   $('duelRibbon').textContent=$('duelTurn').textContent;
   $('duelLast').textContent=(online&&room?'你是 '+(room.seat+1)+'P。':'')+(s?s.last.join(' ／ '):'双方选择彼此的花友房，一方发起，另一方应战。');
   $('duelLink').hidden=!online||!room||room.status==='done';
   $('duelNew').hidden=online;$('duelPass').disabled=!play;
-  $('duelRoomAction').textContent=!gardenAccount.user?'登录植迹账号':!room||room.status==='done'?'发起对局':room.status==='waiting'&&room.seat===1?'接受邀请':room.status==='waiting'?'撤回邀请':'认输';
+  $('duelRoomAction').textContent=!gardenAccount.user?'登录植迹账号':!room||room.status==='done'?'锁定阵容并邀请':room.status==='waiting'&&room.seat===1?'锁定阵容并应战':room.status==='waiting'?'撤回邀请':'认输';
   $('duelRoomAction').disabled=duelState.busy||!!gardenAccount.user&&!duelState.friend;
   const grid=$('duelBoard'),prior=Number(grid.dataset.pos),scope=online?room?.match:'practice';
   const glide=grid.dataset.scope===scope&&s?.trail.at(-2)===prior&&prior!==s?.pos;
@@ -109,9 +160,10 @@ async function duelPlay(pass,cell){
   const online=duelState.mode==='online',board=online?duelState.room?.board:duelState.local;
   const card=pass?null:duelCards().find(c=>c.key===$('duelHand').value);
   try{
-    if(!board||duelState.busy)return;
+    if(!board||duelState.busy||!online&&!localPlaying())return;
+    if(!pass&&!card)throw Error('请先选择本局携带的植物。');
     ButterflyDuel.check(board,card,cell);
-    if(online){await roomCall('play',{key:card?.key??null,asPlain:!!card?.pending,cell});return}
+    if(online){await roomCall('play',{key:card?.key??null,cell});return}
     ButterflyDuel.play(board,card,cell);storePractice();duelMsg('');renderDuel();
   }catch(e){duelMsg(e.message)}
 }
@@ -123,6 +175,7 @@ function pollDuel(){
 async function roomCall(action,extra={}){
   if(!duelState.friend||duelState.mode!=='online'||action&&duelState.busy)return;
   const ticket=++duelState.ticket;clearTimeout(duelState.timer);
+  if(action==='join'||action==='invite')extra={...extra,deck:deckKeys(deckFor(deckPool(),2))};
   if(action){duelState.busy=true;renderDuel()}
   try{
     const p='/api/duel?friend='+encodeURIComponent(duelState.friend),room=duelState.room;
@@ -179,8 +232,9 @@ function initDuel(){
   $('duelHand').onchange=()=>{duelMsg('');renderDuel()};
   $('duelPass').onclick=()=>duelPlay(true);
   $('duelNew').onclick=()=>{if(duelState.local.winner===null&&duelState.local.last.length&&!confirm('重新开始这场同屏对局？'))return;duelState.local=ButterflyDuel.create();storePractice();duelMsg('');renderDuel()};
-  $('duelClass').onclick=async()=>{
-    const key=$('duelHand').value;$('duelClass').disabled=true;duelMsg('DeepSeek 正在查对物种性状…');
-    try{await classifyDuel(key);duelMsg('已归类。')}catch(e){duelMsg(e.message)}finally{renderDuel()}
+  for(const b of $('prepSeats').children)b.onclick=()=>{deckSetup.seat=+b.dataset.prepSeat;renderDeckPrep()};
+  $('prepStart').onclick=()=>{
+    const pool=deckPool();duelState.local=ButterflyDuel.create();duelState.local.decks=[deckFor(pool,0),deckFor(pool,1)];
+    storePractice();duelMsg('');renderDuel();
   };
 }

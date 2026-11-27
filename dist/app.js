@@ -30,8 +30,8 @@ async function refinePlant(r){
       const response=await fetch('/api/model',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({latin:r.latin}),signal:AbortSignal.timeout(90000)});
       if(!response.ok){
         const data=await response.json().catch(()=>({}));
-        const messages={billing:'DeepSeek 账户余额不足。',credentials:'DeepSeek 密钥验证失败。',rate_limit:'DeepSeek 请求频繁，请稍后再试。'};
-        modelErrors.set(k,(messages[data.reason]||'DeepSeek 服务暂不可用。')+'当前显示基础株形。');
+        const messages={billing:'模型服务暂不可用。',credentials:'模型服务暂不可用。',rate_limit:'请求频繁，请稍后再试。'};
+        modelErrors.set(k,(messages[data.reason]||'模型服务暂不可用。')+'当前显示基础株形。');
         return false;
       }
       const {model}=await response.json();if(!model||!Object.hasOwn(plantProfiles,model.form))return false;
@@ -186,6 +186,7 @@ function plantEditor(options,photo,demo,context={}){
   function selectSpecies(){
     clearTimeout(previewTimer);updatePreview();
     const selected=options[Number(speciesPicker.value)];
+    if(!demo&&!editing)void classifyDiscoveries([FloraCatalog.speciesKey(selected.latin)]);
     colorsFor(plantProfile({...selected,model:cachedModel(selected.latin)||selected.model}).form).then(colors=>{
       if(speciesPicker.isConnected&&selected===options[Number(speciesPicker.value)]){palette=colors;updatePreview()}
     });
