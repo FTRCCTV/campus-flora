@@ -78,7 +78,7 @@ export async function accountGarden(request,env){
         return send({error:'增量数据无效。'},400);
       const current=await env.BUCKET.get(objectKey);
       if((current?.httpEtag||'new')!==data.version)return send({error:'花园已有更新，请刷新后重试。'},409);
-      const existing=current?GardenLayout.unpack(await current.json()):GardenLayout.empty();
+      const existing=GardenLayout.unpack(current?await current.json():[]);
       const merged=new Map(existing.records.map(p=>[p.uid,p]));
       for(const uid of patch.removes)merged.delete(uid);
       for(const p of patch.upserts){

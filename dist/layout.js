@@ -289,6 +289,36 @@ const GardenLayout=(()=>{
     }
     return {upserts,removes:[...before.keys()].filter(uid=>!seen.has(uid))};
   }
-  return {carePlan,tend,seedKey,seedCatalogue,rewards,effects,discoveries,unlocked,zones,scenes,weather,props,propRadii,empty,unpack,radius,located,blocker,clear,place,valid,setSpecimenMesh,patchOps};
+  // Only replay edits made on this device. Keep the current cloud record when
+  // another device changed the same item, and keep unrelated cloud additions.
+  function prepareGardenReplay(records,design,patch){
+    const touched=new Set([...patch.removes,...patch.upserts.map(p=>p.uid)]);
+    return {patch,baseRecords:records.filter(p=>touched.has(p.uid)),baseOrder:records.map(p=>p.uid),baseDesign:design};
+  }
+  function rebaseGardenReplay(pending,cloud){
+    if(!pending.patch)return null;
+    const {patch,baseRecords,baseDesign,baseOrder}=pending,items=cloud.records||[];
+    const before=new Map(baseRecords.map(p=>[p.uid,p])),latest=new Map(items.map(p=>[p.uid,p]));
+    const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
+    for(const p of patch.upserts){
+      if(!same(latest.get(p.uid),before.get(p.uid))&&!same(latest.get(p.uid),p))return null;
+    }
+    for(const id of patch.removes)if(latest.has(id)&&!same(latest.get(id),before.get(id)))return null;
+    const design={...cloud.design};
+    for(const key of Object.keys(patch.design)){
+      if(same(patch.design[key],baseDesign[key]))continue;
+      if(!same(cloud.design[key],baseDesign[key])&&!same(cloud.design[key],patch.design[key]))return null;
+      design[key]=patch.design[key];
+    }
+    const remoteOrder=items.map(p=>p.uid);
+    const common=new Set(baseOrder.filter(id=>patch.order.includes(id)&&latest.has(id)));
+    const shared=order=>order.filter(id=>common.has(id));
+    const localReordered=!same(shared(baseOrder),shared(patch.order));
+    if(localReordered&&!same(shared(baseOrder),shared(remoteOrder))&&!same(shared(patch.order),shared(remoteOrder)))return null;
+    const order=localReordered?[...new Set([...patch.order,...remoteOrder])]:
+      [...patch.order.filter(id=>!latest.has(id)&&!baseOrder.includes(id)),...remoteOrder];
+    return {...patch,order,design};
+  }
+  return {carePlan,tend,seedKey,seedCatalogue,rewards,effects,discoveries,unlocked,zones,scenes,weather,props,propRadii,empty,unpack,radius,located,blocker,clear,place,valid,setSpecimenMesh,patchOps,prepareGardenReplay,rebaseGardenReplay};
 })();
 globalThis.GardenLayout=GardenLayout;

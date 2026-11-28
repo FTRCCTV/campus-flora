@@ -84,6 +84,26 @@ test('incremental patch appends, reorders, removes and keeps the garden version 
   assert.deepEqual(afterRemove.records.map(record=>record.uid),['u2']);
 });
 
+test('a new member can plant their first specimen using the browser patch format',async()=>{
+  const {call,user}=await fixture();
+  const saved=await call({owner:user.id,version:'new',patch:{upserts:[plant('first')],removes:[],order:['first']}});
+  assert.equal(saved.status,200);
+  assert.deepEqual((await (await call()).json()).records.map(p=>p.uid),['first']);
+});
+
+test('offline replay preserves other devices’ additions and avoids same-plant conflicts',()=>{
+  const a=plant('a'),b=plant('b',{slot:1}),edit={...a,location:'花坛'};
+  const design=emptyDesign(),patch={upserts:[edit],removes:[],order:['a'],design};
+  const pending=GardenLayout.prepareGardenReplay([a],design,patch);
+  const cloud={records:[b,a],design:{...design,weather:'rain'}};
+  const replay=GardenLayout.rebaseGardenReplay(pending,cloud);
+  assert.deepEqual(replay.order,['b','a']);assert.deepEqual(replay.removes,[]);
+  assert.deepEqual(replay.upserts,[edit]);assert.equal(replay.design.weather,'rain');
+  assert.equal(GardenLayout.rebaseGardenReplay(pending,{...cloud,records:[b,{...a,location:'温室'}]}),null);
+  assert.equal(GardenLayout.rebaseGardenReplay(pending,{...cloud,records:[b]}),null);
+  assert.equal(GardenLayout.rebaseGardenReplay({records:[a],design},cloud),null);
+});
+
 test('malformed incremental payloads are rejected',async()=>{
   const {call,user}=await fixture();
   const created=await call({owner:user.id,version:'new',records:[plant('u1')],design:emptyDesign()});

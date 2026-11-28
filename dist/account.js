@@ -45,42 +45,47 @@ function clearPendingGarden(){
 }
 let flushTimer=0;
 function scheduleFlush(delay=20000){clearTimeout(flushTimer);flushTimer=setTimeout(()=>{void flushPendingGarden()},delay)}
-// 离线修改重放：先取服务端最新版本，再只发差异（upters/removes），避免整份花园重传。
 async function flushPendingGarden(){
-  const pending=pendingGarden();
-  if(!pending||saveBusy||!gardenAccount.user||gardenAccount.mode!=='member')return false;
-  saveBusy=true;
+  const owner=gardenAccount.user?.id,pending=pendingGarden();
+  if(!pending||pending.conflict||saveBusy||!owner||gardenAccount.mode!=='member')return false;
+  const key=pendingKey(owner),isCurrent=()=>gardenAccount.user?.id===owner&&pendingGarden()?.at===pending.at;
+  const conflict=()=>{
+    if(isCurrent()){storePendingGarden({...pending,conflict:true});toast('花园有冲突，本机修改已保留。可在「我的账号」处理。')}
+    return false;
+  };
+  saveBusy=true;let synced=false;
   try{
     const res=await fetch('/api/account',{credentials:'same-origin',cache:'no-store',signal:AbortSignal.timeout(15000)});
     const data=await res.json();
-    if(!res.ok||!data.user||data.user.id!==gardenAccount.user.id)throw Error();
-    const {upserts,removes}=GardenLayout.patchOps(data.records||[],pending.records);
+    if(!res.ok)throw Error();
+    if(data.user?.id!==owner||!isCurrent())return false;
+    const patch=GardenLayout.rebaseGardenReplay(pending,data);
+    if(!patch)return conflict();
     const response=await fetch('/api/account',{
       method:'PUT',credentials:'same-origin',cache:'no-store',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({owner:gardenAccount.user.id,version:data.version,patch:{upserts,removes,order:pending.records.map(r=>r.uid),design:pending.design}}),
-      signal:AbortSignal.timeout(30000)
+      body:JSON.stringify({owner,version:data.version,patch}),signal:AbortSignal.timeout(30000)
     });
-    const saved=await response.json();
-    if(!response.ok)throw Error(saved.error||'');
-    clearPendingGarden();
-    gardenAccount.version=saved.version||data.version;
-    gardenAccount.records=pending.records;gardenAccount.design=pending.design;
-    setAccountButton();route();toast('离线期间的修改已同步到账号花园。');
-    return true;
-  }catch{scheduleFlush(30000);return false}
-  finally{saveBusy=false}
+    if(response.status===400||response.status===413)return conflict();
+    if(!response.ok)throw Error();
+    if(isCurrent()){localStorage.removeItem(key);synced=true}
+    return synced;
+  }catch{if(isCurrent())scheduleFlush(30000);return false}
+  finally{saveBusy=false;if(synced){await refreshAccount({silent:true});toast('本机修改已同步。')}}
 }
 async function saveMemberGarden(update){
   if(saveBusy)throw Error('上一次修改正在同步，请稍后重试。');
+  if(pendingGarden()){void flushPendingGarden();throw Error('还有一份本机修改待同步，可在「我的账号」查看。')}
+  const owner=gardenAccount.user.id;
   saveBusy=true;++sessionEpoch;
-  let reload=false,list,design;
+  let reload=false,list,design,patch;
   try{
     list=gardenAccount.records.map(r=>structuredClone(GardenLayout.located(r)));design=structuredClone(gardenAccount.design);update(list,design);
     if(!GardenLayout.valid(list,design))throw Error('物品重叠或位置无效。');
     const {upserts,removes}=GardenLayout.patchOps(gardenAccount.records,list);
+    patch={upserts,removes,order:list.map(r=>r.uid),design};
     const response=await fetch('/api/account',{
       method:'PUT',credentials:'same-origin',cache:'no-store',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({owner:gardenAccount.user.id,version:gardenAccount.version,patch:{upserts,removes,order:list.map(r=>r.uid),design}}),
+      body:JSON.stringify({owner,version:gardenAccount.version,patch}),
       signal:AbortSignal.timeout(30000)
     });
     const data=await response.json();
@@ -88,10 +93,9 @@ async function saveMemberGarden(update){
     design.seeds=data.seeds??GardenLayout.seedCatalogue(list,design.seeds);
     design.discovered=data.discovered??GardenLayout.discoveries(list,design.discovered);
     gardenAccount.version=data.version;gardenAccount.records=list;gardenAccount.design=design;
-    if(pendingGarden())clearPendingGarden();
   }catch(error){
     if(error instanceof TypeError||error.name==='TimeoutError'||error.name==='AbortError'){
-      if(list&&design&&storePendingGarden({records:list,design,at:Date.now()})){
+      if(patch&&owner===gardenAccount.user?.id&&!pendingGarden()&&storePendingGarden({...GardenLayout.prepareGardenReplay(gardenAccount.records,gardenAccount.design,patch),at:Date.now()})){
         scheduleFlush(20000);
         throw Error('网络中断，这次修改已暂存本机，恢复网络后会自动同步。');
       }
@@ -158,6 +162,23 @@ function accountPanel(){
   const importCount=GardenLayout.discoveries(pending,gardenAccount.design.discovered).length;
   const localDecor=guestDesign.decorations.filter(p=>GardenLayout.unlocked(p.kind,importCount)&&!gardenAccount.design.decorations.some(d=>d.uid===p.uid));
   show('<div class="body accountPanel"><h2>'+esc(user.name)+'</h2><h3>账号花园</h3><p>已保存 '+gardenAccount.records.length+' 条观察。种植、调整和移除均同步到此账号。</p><h3>本机记录</h3><p>'+ (pending.length||localDecor.length?'可导入 '+pending.length+' 条本机观察和 '+localDecor.length+' 件装饰。位置冲突时会自动挪开。':'没有待导入的本机记录。')+'</p><button class="primary" id="importGarden">导入本机花园</button><p role="status" id="accountFeedback"></p><button class="light" id="changePassword">修改密码</button><button class="light" id="endSession">退出账号</button></div>');
+  const unsynced=pendingGarden();
+  if(unsynced){
+    const status=$('accountFeedback'),button=document.createElement('button');
+    status.textContent=unsynced.conflict?'本机修改与云端花园有冲突。可先导出备份，再选择保留云端版本。':'本机有待同步修改。';
+    button.type='button';button.className='light';button.textContent='导出待同步修改';
+    button.onclick=()=>{
+      const url=URL.createObjectURL(new Blob([JSON.stringify(unsynced,null,2)],{type:'application/json'}));
+      const link=document.createElement('a');link.href=url;link.download='植迹-待同步修改.json';link.click();
+      setTimeout(()=>URL.revokeObjectURL(url),1000);
+    };
+    status.after(button);
+    if(unsynced.conflict){
+      const keep=document.createElement('button');keep.className='light';keep.textContent='保留云端版本';
+      keep.onclick=()=>{if(gardenAccount.user?.id===user.id&&pendingGarden()?.at===unsynced.at&&confirm('放弃这份待同步修改并保留云端花园？')){clearPendingGarden();accountPanel()}};
+      button.after(keep);
+    }
+  }
   $('changePassword').onclick=passwordPanel;
   $('endSession').onclick=async event=>{
     const button=event.currentTarget;button.disabled=true;
