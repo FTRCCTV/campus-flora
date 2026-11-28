@@ -25,19 +25,34 @@ test('published route is stable until affected, includes the winning edge and ma
     const route=[...s.forecast];game.play(s,null,null,()=>0);assert.deepEqual(s.forecast,route);
     game.play(s,null,null,()=>.99);assert.equal(s.pos,route[0]);assert.deepEqual(s.forecast,s.winner===null?route.slice(1):[]);
   }
-  const t=game.create(()=>0),before=structuredClone(t);
-  assert.throws(()=>game.play(t,game.basic,24),/E5/);assert.deepEqual(t,before);
-  t.cells[1]=wall;assert.throws(()=>game.play(t,game.basic,5),/E5/);
-  assert.throws(()=>game.play(t,{type:'vine',key:'v'},23),/E5/);
+});
+test('either scoring edge suffices even when E5 is blocked; closing the last exit is atomic',()=>{
+  for(const [closed,seat] of [[[4,9,14,19],0],[[20,21,22,23],1]]){
+    const s=game.create(()=>0);
+    for(const c of closed)s.cells[c]=wall;
+    game.play(s,game.basic,24);
+    assert.equal(s.wandering,false);
+    const end=s.forecast.at(-1);assert.ok(seat===0?end>=20:end%5===4);
+    while(s.winner===null)game.play(s,null);
+    assert.equal(s.winner,seat);
+  }
+  const t=game.create();t.cells[1]=wall;
+  const before=structuredClone(t);
+  assert.throws(()=>game.play(t,game.basic,5),/右边或下边/);assert.deepEqual(t,before);
+  const v=game.create();v.pos=6;
+  for(const c of [1,5,7])v.cells[c]=wall;
+  assert.doesNotThrow(()=>game.check(v,game.basic,10));
+  assert.throws(()=>game.play(v,{key:'vine',type:'vine'},10),/右边或下边/);
+
 });
 test('shortest detour, random walking, fully trapped flutter and reopening a route',()=>{
   const s=game.create();s.pos=12;s.cells[13]=wall;s.cells[17]=wall;
   const before=game.paths(s).dist[s.pos];game.fly(s,()=>0);
   assert.ok([7,11].includes(s.pos));assert.equal(game.paths(s).dist[s.pos],before-1);
-  const t=game.create();t.cells[24]=wall;game.fly(t,()=>.9999);assert.equal(t.pos,5);
+  const t=game.create();for(const c of [4,9,14,19,20,21,22,23,24])t.cells[c]=wall;game.fly(t,()=>.9999);assert.equal(t.pos,5);
   for(const c of [0,6,10])t.cells[c]=wall;game.fly(t,()=>0);assert.equal(t.pos,6);assert.ok(t.cells[6]);
-  game.play(t,game.tool,24);assert.equal(t.cells[24],null);assert.equal(t.trial[0],false);
-  assert.ok(game.paths(t).dist[t.pos]>0);
+  game.play(t,game.tool,20);assert.equal(t.cells[20],null);assert.equal(t.trial[0],false);
+  assert.equal(t.wandering,false);assert.equal(t.forecast.at(-1),20);
 });
 test('lures respect shortest paths, vines stop at board boundaries, reusable cards cool down',()=>{
   const s=game.create();game.play(s,{key:'x',name:'蜜源',type:'nectar'},5);game.play(s,null,null,()=>0);

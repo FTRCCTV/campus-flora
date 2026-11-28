@@ -25,9 +25,10 @@ const ButterflyDuel=(()=>{
     planFlight(s,random);return s;
   }
   const coord=c=>'ABCDE'[c%5]+(1+Math.floor(c/5));
-  function paths(s){
+  const scoringCells=[4,9,14,19,20,21,22,23,24];
+  function paths(s,targets=[24]){
     const dist=Array(25).fill(-1),count=Array(25).fill(0),queue=[];
-    if(!hard(s.cells[24])){dist[24]=0;count[24]=1;queue.push(24)}
+    for(const target of targets)if(!hard(s.cells[target])){dist[target]=0;count[target]=1;queue.push(target)}
     for(let i=0;i<queue.length;i++){
       const c=queue[i];
       for(const n of neighbors(c)){
@@ -45,7 +46,10 @@ const ButterflyDuel=(()=>{
   }
   function planFlight(s,random=Math.random){
     if(s.winner!==null){s.forecast=[];s.plan=[];return}
-    const {dist,count}=paths(s),prior=s.plan||[];
+    s.routeRules=2;
+    let route=paths(s);
+    if(route.dist[s.pos]<0)route=paths(s,scoringCells);
+    const {dist,count}=route,prior=s.plan||[];
     if(dist[s.pos]<0){
       const adjacent=neighbors(s.pos),open=adjacent.filter(n=>!hard(s.cells[n]));
       const trapped=!open.length,choices=trapped?adjacent:open;
@@ -56,7 +60,7 @@ const ButterflyDuel=(()=>{
     const previous=new Map();let cursor=s.pos;
     if(!s.wandering)for(const n of prior){previous.set(cursor,n);cursor=n}
     s.wandering=false;s.trapped=false;s.plan=[];cursor=s.pos;
-    while(cursor!==24){
+    while(dist[cursor]>0){
       const steps=neighbors(cursor).filter(n=>dist[n]===dist[cursor]-1);
       const flowers=steps.filter(n=>s.cells[n]?.type==='nectar'),wind=s.cells[cursor];
       const blown=wind?.type==='wind'?cursor+(wind.owner===0?5:1):-1;
@@ -96,7 +100,7 @@ const ButterflyDuel=(()=>{
     if(hard(card)){
       const preview={...s,cells:s.cells.slice()};
       plantTile(preview,card,cell,s.turn);
-      if(paths(preview).dist[s.pos]<0)throw Error('这一步会封死蝶径，请给蝴蝶留一条通往 E5 的路。');
+      if(paths(preview,scoringCells).dist[s.pos]<0)throw Error('这一步会封死蝶径，请给蝴蝶留一条通往右边或下边的路。');
     }
   }
   function play(s,card,cell,random=Math.random){

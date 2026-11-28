@@ -90,7 +90,7 @@ export async function duelApi(request,env){
     if(!edge)return authJson({error:'需要双方先成为花友。'},403);
     const path='duel/rooms/v1/'+encodeURIComponent(id)+'.json',doc=await env.BUCKET.get(path);
     let room=doc?await doc.json():null;
-    if(room?.board&&(!Array.isArray(room.board.forecast)||(room.board.winner===null&&!room.board.wandering&&room.board.forecast.at(-1)!==24))){
+    if(room?.board&&(!Array.isArray(room.board.forecast)||(room.board.winner===null&&room.board.routeRules!==2))){
       let seed=2166136261;
       for(const ch of room.match+':'+room.rev)seed=Math.imul(seed^ch.charCodeAt(0),16777619);
       ButterflyDuel.planFlight(room.board,()=>((seed=(Math.imul(seed,1664525)+1013904223)>>>0)/4294967296));
