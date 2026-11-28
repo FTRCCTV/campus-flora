@@ -30,7 +30,8 @@ function drawStudioFrame(){
   const surface=studioSurface(design.weather);
   clearTimeout(studio.surfaceTimer);
   if(surface.progress<1)studio.surfaceTimer=setTimeout(scheduleStudio,85);
-  studio.picker=paintStudioScene(canvas,{zone,surface,items,scene:design.scene,weather:design.weather,angle:studio.angle,pitch:studio.pitch,panX:studio.panX,panY:studio.panY,zoom:studio.zoom,extent:studio.extent,selected:studio.mode==='edit'?studio.selected:null});
+  studio.picker=paintStudioScene(canvas,{zone,surface,items:sceneCareItems(items),scene:design.scene,weather:design.weather,angle:studio.angle,pitch:studio.pitch,panX:studio.panX,panY:studio.panY,zoom:studio.zoom,extent:studio.extent,selected:studio.mode==='edit'?studio.selected:null});
+  drawCareShelf();
   const handle=$('rotateHandle'),anchor=studio.picker.handle;
   handle.hidden=!anchor||studio.busy;
   if(anchor){
@@ -68,7 +69,7 @@ function renderStudio(){
     for(const p of studio.items)picker.add(new Option(p.kind?GardenLayout.props[p.kind]:p.name,p.uid));
     picker.value=studio.selected||'';studioSelectionTools();renderDecorCards();
   }
-  renderGardenCare();scheduleStudio();
+  renderGardenCare();$('gardenSound').dispatchEvent(new Event('gardenchange'));scheduleStudio();
 }
 function renderDecorCards(){
   const select=$('propChoice'),grid=$('decorCards');
@@ -132,6 +133,7 @@ function resetStudioCamera(){
 function clampStudioPitch(value){return Math.max(studio.mode==='edit'?.25:0,Math.min(1.42,value))}
 function studioZoom(scale){studio.zoom=Math.max(.55,Math.min(2.65,studio.zoom*scale));scheduleStudio()}
 function initStudio(){
+  initSceneCare();initGardenSound();
   for(const [id,values] of [['sceneChoice',GardenLayout.scenes],['weatherChoice',GardenLayout.weather],['effectChoice',GardenLayout.effects],['propChoice',GardenLayout.props]]){
     for(const [key,label] of Object.entries(values))$(id).add(new Option(label,key));
   }

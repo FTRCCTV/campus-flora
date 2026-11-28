@@ -1,7 +1,7 @@
 const GardenLayout=(()=>{
   const zones=['sill','path'];
   const legacyZones={bench:'sill',shelf:'sill',pond:'path',meadow:'path'};
-  const scenes={campus:'校园植物园',terrace:'屋顶露台',courtyard:'中式庭院',starlight:'繁星之夜'};
+  const scenes={campus:'校园植物园',terrace:'屋顶露台',courtyard:'中式庭院',starlight:'繁星之夜',reedpond:'芦岸水庭'};
   const weather={sunny:'晴天',rain:'细雨',snow:'飘雪'};
   const props={bench:'木长椅',lantern:'庭园灯',rock:'景石',arch:'花架拱门',planter:'装饰花槽',terrarium:'玻璃生态箱',worktable:'园艺操作台',plantstand:'三层盆栽架',wateringcan:'珐琅浇水壶',teatable:'庭院茶桌',steppingstones:'苔石步道',fence:'木栅栏',fountain:'双层石泉',herbmarker:'黄铜植物铭牌',birdbath:'青瓷鸟浴盆',sundial:'日晷观测台',armillary:'黄铜浑仪'};
   const propRadii={bench:.90,lantern:.36,rock:.62,arch:1.03,planter:.55,terrarium:.64,worktable:.84,plantstand:.66,wateringcan:.70,teatable:.48,steppingstones:.76,fence:.80,fountain:.61,herbmarker:.33,birdbath:.50,sundial:.55,armillary:.59};
@@ -11,7 +11,7 @@ const GardenLayout=(()=>{
     {at:3,id:'birdbath',label:props.birdbath},{at:4,id:'fireflies',label:effects.fireflies},
     {at:5,id:'sundial',label:props.sundial},{at:6,id:'butterflies',label:effects.butterflies},
     {at:7,id:'seedsong',label:effects.seedsong},{at:8,id:'prism',label:effects.prism},{at:10,id:'armillary',label:props.armillary},
-    {at:12,id:'meteors',label:effects.meteors},{at:15,id:'aurora',label:effects.aurora},{at:18,id:'lanternsky',label:effects.lanternsky}
+    {at:11,id:'reedpond',label:scenes.reedpond},{at:12,id:'meteors',label:effects.meteors},{at:15,id:'aurora',label:effects.aurora},{at:18,id:'lanternsky',label:effects.lanternsky}
   ];
   function discoveries(records,previous=[]){
     const keys=new Set(Array.isArray(previous)?previous:[]);
@@ -258,7 +258,7 @@ const GardenLayout=(()=>{
   function valid(records,design){
     if(!design||!Object.hasOwn(scenes,design.scene)||!Object.hasOwn(weather,design.weather)||!Array.isArray(design.decorations)||design.decorations.length>300)return false;
     const count=discoveries(records,design.discovered).length,effect=design.effect??'none';
-    if(!Object.hasOwn(effects,effect)||!unlocked(effect,count)||design.decorations.some(p=>!unlocked(p?.kind,count)))return false;
+    if(!unlocked(design.scene,count)||!Object.hasOwn(effects,effect)||!unlocked(effect,count)||design.decorations.some(p=>!unlocked(p?.kind,count)))return false;
     const ids=new Set(),prior=[];
     for(const [index,p] of [...records,...design.decorations].entries()){
       if(!p||!zones.includes(p.zone)||typeof p.uid!=='string'||!p.uid||p.uid.length>400||ids.has(p.uid))return false;

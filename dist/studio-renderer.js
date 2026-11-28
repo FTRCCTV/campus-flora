@@ -189,5 +189,5 @@ function paintStudioScene(canvas,view){
     const px=Math.floor(x*ratio),py=Math.floor(y*ratio);
     return !!windowMask&&px>=0&&py>=0&&px<pw&&py<ph&&cache.paneImage.data[(py*pw+px)*4+3]>0;
   }
-  return {surface:view.surface,night:scene==='starlight',hit,handle,ground:projection.ground,windowHit,windowMask,width,height,ratio};
+  return {projection,surface:view.surface,night:scene==='starlight',hit,handle,ground:projection.ground,windowHit,windowMask,width,height,ratio};
 }

@@ -397,7 +397,7 @@ function drawHabitat({zone,scene,weather,extent,angle,face,box,pillar,ring,recta
     face(wallQuad(x-.18,x+.18,.06,.82,z+.371),'#687e70');
     box(x,.53,z+.382,.32,.028,.024,oak);
     box(x+.125,.39,z+.393,.031,.064,.029,brass);
-    if(zone==='pond'){
+    if(zone==='pond'||scene==='reedpond'){
       const pondZ=rear+.24,pondX=-edge*.43,radius=Math.min(1.62,edge*.43);
       face(ring(pondX,.011,pondZ,radius,.28,18),snow?'#d4dccc':'#97a387');
       face(ring(pondX,.015,pondZ,radius*.96,.24,18),snow?'#adc4c0':wet?'#618e87':'#76a79a');

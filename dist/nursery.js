@@ -13,61 +13,20 @@ function growthSummary(plant){
   const keys=Object.keys(goals),progress=keys.reduce((n,k)=>n+Math.min(goals[k],care[k]),0)/keys.reduce((n,k)=>n+goals[k],0);
   return {stage,goals,care,percent:stage>=3?100:Math.round((stage+progress)/3*100)};
 }
-async function careForPlant(plant,kind,owner){
+async function careForPlant(plant,kind,owner,rotation){
   const snapshot=growthSummary(plant);
   await writeGarden((records,design)=>{
     if(!owner||owner!==studioOwner()||visitingGarden||activeStudioDraft())throw Error('花园已切换或正在布置，请重新选择。');
     const current=records.find(p=>p.uid===plant.uid);
     if(!current||current.latin!==plant.latin||(current.growth??2)!==snapshot.stage||
        Object.keys(careNames).some(k=>(current.care?.[k]||0)!==snapshot.care[k]))throw Error('植株已有更新，请重新选择。');
-    GardenLayout.tend(current,kind);
+    if(Number.isFinite(rotation))current.rotation=rotation;
+    const canGrowTowardLight=(current.growth??2)<3&&(current.care?.light||0)<(GardenLayout.carePlan(current).light||0);
+    if(kind!=='light'||canGrowTowardLight)GardenLayout.tend(current,kind);
     if((current.growth??2)>snapshot.stage){
       const other=GardenLayout.blocker(GardenLayout.located(current),records.concat(design.decorations));
       if(other)throw Error('长大后会碰到「'+(other.name||GardenLayout.props[other.kind])+'」，请先留出空间。');
     }
-  });
-}
-function operateCareTool(plant,kind){
-  return new Promise(resolve=>{
-    const water=kind==='water',dialog=document.createElement('dialog');
-    dialog.className='careWorkshop';
-    const shape=water?'<path d="M15 30Q0 6 15 8Q25 8 23 25" fill="none" stroke="#49706a" stroke-width="5"/><path d="M15 22H46L44 50Q30 57 14 48Z" fill="#65948b"/><path d="M43 38L65 16L70 20L46 48" fill="#507c73"/><ellipse cx="69" cy="17" rx="7" ry="4" fill="#b2c5ad"/>':'<path d="M15 9L51 9L48 17Q62 43 53 52H11Q4 42 18 17Z" fill="#c39861"/><path d="M15 9H51M17 17H48" stroke="#80613f" stroke-width="4"/><path d="M22 38Q23 21 43 24Q41 43 22 38Z" fill="#496844"/>';
-    dialog.innerHTML='<h2></h2><p></p><div class="workSurface"><canvas class="workPlant"></canvas><canvas class="workDrops"></canvas><button type="button" class="handTool"><svg viewBox="0 0 80 60" aria-hidden="true">'+shape+'</svg></button></div><progress max="1" value="0" aria-label="照料进度"></progress><button class="light">取消</button>';
-    document.body.append(dialog);const surface=dialog.querySelector('.workSurface'),hand=dialog.querySelector('.handTool'),meter=dialog.querySelector('progress');
-    const name=water?'浇水壶':'肥料袋';dialog.querySelector('h2').textContent=plant.name+' · '+careVerbs[kind];
-    dialog.querySelector('p').textContent='拖住'+name+'移到植株上方，保持倾倒至进度满格。键盘可按住空格操作。';
-    hand.setAttribute('aria-label',name);const portrait=surface.firstElementChild;paintPot(portrait,plant);
-    const layer=surface.children[1],ctx=layer.getContext('2d');layer.width=500;layer.height=300;
-    let x=.13,y=.25,held=false,frame=0,last=0,amount=0;
-    function position(){hand.style.left=x*100+'%';hand.style.top=y*100+'%'}
-    function drag(e){const r=surface.getBoundingClientRect();x=Math.max(.06,Math.min(.94,(e.clientX-r.left)/r.width));y=Math.max(.06,Math.min(.93,(e.clientY-r.top)/r.height));position()}
-    hand.onpointerdown=e=>{if(e.button!==0)return;e.preventDefault();hand.setPointerCapture(e.pointerId);held=true;drag(e)};
-    let dragId=null;
-    const move=e=>{if(held&&e.pointerId===dragId)drag(e)};
-    const stop=e=>{if(e.pointerId===dragId){held=false;dragId=null}};
-    hand.addEventListener('pointerdown',e=>{if(e.button===0)dragId=e.pointerId});
-    dialog.addEventListener('pointermove',move,true);
-    dialog.addEventListener('pointerup',stop,true);
-    dialog.addEventListener('pointercancel',stop,true);
-    hand.onpointercancel=hand.onpointerup=()=>{held=false};
-    hand.onlostpointercapture=e=>{if(e.target===hand&&!hand.hasPointerCapture(e.pointerId))held=false};
-    hand.onkeydown=e=>{if(e.code==='Space'){e.preventDefault();held=true;x=.47;y=.27;position()}};
-    hand.onkeyup=e=>{if(e.code==='Space'){e.preventDefault();held=false}};
-    hand.onblur=()=>{held=false};
-    dialog.lastChild.onclick=()=>dialog.close();
-    dialog.onclose=()=>{cancelAnimationFrame(frame);dialog.remove();resolve(amount>=1)};
-    dialog.showModal();hand.focus();position();
-    function draw(now){
-      const pouring=held&&x>=.28&&x<=.70&&y<=.53;
-      hand.classList.toggle('tilted',pouring);ctx.clearRect(0,0,500,300);
-      if(pouring){
-        amount=Math.min(1,amount+Math.min(50,now-last)/1350);meter.value=amount;
-        for(let i=0;i<18;i++){const t=(now/550+i/18)%1,dx=Math.sin(i*5)*t*(water?5:21);
-          ctx.fillStyle=water?'#559cb5':'#967043';ctx.beginPath();ctx.ellipse(x*500+18+dx,y*300+12+t*t*99,2,water?4:2,0,0,Math.PI*2);ctx.fill()}
-      }
-      last=now;if(amount>=1){dialog.close();return}frame=requestAnimationFrame(draw);
-    }
-    frame=requestAnimationFrame(draw);
   });
 }
 function renderPlantCare(plant,panel=$('carePanel'),compact=false){
@@ -96,14 +55,15 @@ function renderPlantCare(plant,panel=$('carePanel'),compact=false){
   const status=panel.querySelector('.careStatus'),buttons=panel.querySelector('.careActions');
   if(blocked)status.textContent='保存或取消布置后可以照料。';
   else if(stage>=3)status.textContent='植株已成熟，浇水和施肥会记入照料次数。';
+  if(!blocked)status.textContent='在花园场景内拖动水壶或肥料袋到植株上方，左右拖动植株即可转盆向光。';
   for(const k of (stage<3?Object.keys(goals):['water','nutrient',stage===3?'harvest':'pocket'])){
+    if(['water','light','nutrient'].includes(k))continue;
     const b=document.createElement('button'),done=stage<3&&care[k]>=goals[k];b.type='button';b.className='light careAction';b.dataset.care=k;
     b.textContent=(careVerbs[k]||nurseryStages[stage][1])+(done?' ✓':'');b.disabled=blocked||done;
     b.onclick=async()=>{
       if(k==='pocket'){openSeedPocket();return}
       const usable=[...buttons.children].filter(el=>!el.disabled);usable.forEach(el=>el.disabled=true);
       try{
-        if((k==='water'||k==='nutrient')&&!await operateCareTool(plant,k)){usable.forEach(el=>el.disabled=false);return}
         await careForPlant(plant,k,owner);
         if(owner!==studioOwner())return;
         route();const updated=readGarden().find(p=>p.uid===plant.uid);

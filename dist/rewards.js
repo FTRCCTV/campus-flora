@@ -1,6 +1,11 @@
 function rewardIllustration(canvas,reward){
   canvas.width=176;canvas.height=104;
   const ctx=canvas.getContext('2d');
+  if(reward.id==='reedpond'){
+    ctx.fillStyle='#dce4c9';ctx.fillRect(0,0,176,104);ctx.fillStyle='#719b99';ctx.beginPath();ctx.ellipse(88,64,74,27,0,0,Math.PI*2);ctx.fill();
+    for(let i=0;i<11;i++){const x=28+i*10,y=50+4*Math.sin(i);ctx.strokeStyle='#617a50';ctx.beginPath();ctx.moveTo(x,y+7);ctx.lineTo(x-3,y-12-i%4*3);ctx.stroke();ctx.fillStyle='#886742';ctx.fillRect(x-5,y-20-i%4*3,4,10)}
+    return;
+  }
   if(Object.hasOwn(GardenLayout.props,reward.id)){
     const project=studioProjection(176,104,.52,1,3.25,.40).project;
     const faces=studioPropFaces(reward.id,false).map(f=>({...f,p:f.vertices.map(project)}));
@@ -35,7 +40,7 @@ function renderRewards(design){
   const next=GardenLayout.rewards.find(r=>r.at>count);
   $('effectControl').hidden=guest||!GardenLayout.unlocked('petals',count);
   $('effectChoice').disabled=guest||studio.busy;
-  for(const select of [$('propChoice'),$('effectChoice')]){
+  for(const select of [$('propChoice'),$('effectChoice'),$('sceneChoice')]){
     for(const opt of select.options){
       const reward=GardenLayout.rewards.find(r=>r.id===opt.value);
       if(!reward)continue;
@@ -59,6 +64,8 @@ function renderRewards(design){
         if(Object.hasOwn(GardenLayout.props,r.id)){
           if(studio.mode!=='edit')setStudioMode('edit');
           $('propChoice').value=r.id;$('addProp').click();
+        }else if(Object.hasOwn(GardenLayout.scenes,r.id)){
+          selectZone(outdoorZone);$('sceneChoice').value=r.id;$('sceneChoice').dispatchEvent(new Event('change'));
         }else{
           $('effectChoice').value=r.id;$('effectChoice').dispatchEvent(new Event('change'));
         }
@@ -67,9 +74,9 @@ function renderRewards(design){
     }
   }
   GardenLayout.rewards.forEach((r,i)=>{
-    const card=shelf.children[i],btn=card.lastElementChild,locked=count<r.at,active=design.effect===r.id;
+    const card=shelf.children[i],btn=card.lastElementChild,locked=count<r.at,active=design.effect===r.id||design.scene===r.id;
     card.classList.toggle('locked',locked);btn.disabled=locked||studio.busy||active;
-    btn.textContent=locked?r.at+' 种解锁':active?'已启用':Object.hasOwn(GardenLayout.props,r.id)?'摆入花园':'启用动效';
+    btn.textContent=locked?r.at+' 种解锁':active?'已启用':Object.hasOwn(GardenLayout.props,r.id)?'摆入花园':Object.hasOwn(GardenLayout.scenes,r.id)?'进入场景':'启用动效';
     btn.setAttribute('aria-label',r.label+'，'+btn.textContent);
   });
 }
