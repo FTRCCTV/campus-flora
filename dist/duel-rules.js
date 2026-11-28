@@ -26,12 +26,13 @@ const ButterflyDuel=(()=>{
   }
   const coord=c=>'ABCDE'[c%5]+(1+Math.floor(c/5));
   const scoringCells=[4,9,14,19,20,21,22,23,24];
-  function paths(s,targets=[24]){
+  function paths(s,targets=[24],firstContact=false){
     const dist=Array(25).fill(-1),count=Array(25).fill(0),queue=[];
     for(const target of targets)if(!hard(s.cells[target])){dist[target]=0;count[target]=1;queue.push(target)}
     for(let i=0;i<queue.length;i++){
       const c=queue[i];
       for(const n of neighbors(c)){
+        if(firstContact&&scoringCells.includes(n))continue;
         if(hard(s.cells[n])&&n!==s.pos)continue;
         if(dist[n]===-1){dist[n]=dist[c]+1;queue.push(n)}
         if(dist[n]===dist[c]+1)count[n]+=count[c];
@@ -46,9 +47,13 @@ const ButterflyDuel=(()=>{
   }
   function planFlight(s,random=Math.random){
     if(s.winner!==null){s.forecast=[];s.plan=[];return}
-    s.routeRules=2;
+    s.routeRules=3;
     let route=paths(s);
-    if(route.dist[s.pos]<0)route=paths(s,scoringCells);
+    // A flight ends on first edge contact. Search inward from equally ranked
+    // exits, without treating any other scoring square as a transit square.
+    for(let offset=1;route.dist[s.pos]<0&&offset<=4;offset++){
+      route=paths(s,[24-offset,24-5*offset],true);
+    }
     const {dist,count}=route,prior=s.plan||[];
     if(dist[s.pos]<0){
       const adjacent=neighbors(s.pos),open=adjacent.filter(n=>!hard(s.cells[n]));

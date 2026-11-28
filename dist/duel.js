@@ -105,7 +105,7 @@ function openDuel(){
     leaveDuel();deckSetup.picks=[{},{},{}];deckSetup.seat=0;duelState.scope=duelOwner();duelState.room=null;duelState.friend='';duelState.mode='local';duelMsg('');
     try{duelState.local=JSON.parse(sessionStorage.getItem(duelStorage()))}catch{duelState.local=null}
     if(!duelState.local)duelState.local=ButterflyDuel.create();
-    if(!Array.isArray(duelState.local.forecast)||(duelState.local.winner===null&&duelState.local.routeRules!==2)){ButterflyDuel.planFlight(duelState.local);storePractice()}
+    if(!Array.isArray(duelState.local.forecast)||(duelState.local.winner===null&&duelState.local.routeRules!==3)){ButterflyDuel.planFlight(duelState.local);storePractice()}
   }
   if(!$('duelBoard').childElementCount)initDuel();
   void classifyDiscoveries((gardenAccount.user?gardenAccount.design:readDesign())?.discovered||[]);

@@ -45,6 +45,26 @@ test('either scoring edge suffices even when E5 is blocked; closing the last exi
   assert.throws(()=>game.play(v,{key:'vine',type:'vine'},10),/右边或下边/);
 
 });
+test('blocked E5 prioritizes corner proximity before flight distance and stops on first contact',()=>{
+  for(const r of [0,.5,.99]){
+    for(const offset of [1,2,3,4]){
+      const s=game.create(()=>r);s.cells[24]=wall;
+      for(let i=1;i<offset;i++){s.cells[24-i]=wall;s.cells[24-5*i]=wall}
+      // An open exit that can only be entered via another edge cannot score first.
+      if(offset===1)s.cells[18]=wall;
+      const expected=offset===1?2:offset;
+      game.planFlight(s,()=>r);
+      const goal=s.forecast.at(-1);
+      assert.ok([24-expected,24-5*expected].includes(goal));
+      assert.ok(s.forecast.slice(0,-1).every(c=>c<20&&c%5!==4));
+      while(s.winner===null)game.fly(s,()=>r);
+      assert.equal(s.pos,goal);
+    }
+    const s=game.create(()=>r);s.cells[24]=wall;game.planFlight(s,()=>r);
+    assert.ok([19,23].includes(s.forecast.at(-1)));
+    assert.equal(s.forecast.length,7);
+  }
+});
 test('shortest detour, random walking, fully trapped flutter and reopening a route',()=>{
   const s=game.create();s.pos=12;s.cells[13]=wall;s.cells[17]=wall;
   const before=game.paths(s).dist[s.pos];game.fly(s,()=>0);
