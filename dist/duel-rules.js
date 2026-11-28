@@ -64,8 +64,7 @@ const ButterflyDuel=(()=>{
       const next=choices.includes(previous.get(cursor))?previous.get(cursor):pick(choices,n=>count[n],random);
       s.plan.push(next);cursor=next;
     }
-    const edge=s.plan.findIndex(n=>n>=20||n%5===4);
-    s.forecast=s.plan.slice(0,edge<0?s.plan.length:edge+1);
+    s.forecast=[...s.plan];
   }
   function fly(s,random=Math.random){
     planFlight(s,random);if(!s.plan.length)return;

@@ -5,13 +5,13 @@ const GardenLayout=(()=>{
   const weather={sunny:'晴天',rain:'细雨',snow:'飘雪'};
   const props={bench:'木长椅',lantern:'庭园灯',rock:'景石',arch:'花架拱门',planter:'装饰花槽',terrarium:'玻璃生态箱',worktable:'园艺操作台',plantstand:'三层盆栽架',wateringcan:'珐琅浇水壶',teatable:'庭院茶桌',steppingstones:'苔石步道',fence:'木栅栏',fountain:'双层石泉',herbmarker:'黄铜植物铭牌',birdbath:'青瓷鸟浴盆',sundial:'日晷观测台',armillary:'黄铜浑仪'};
   const propRadii={bench:.90,lantern:.36,rock:.62,arch:1.03,planter:.55,terrarium:.64,worktable:.84,plantstand:.66,wateringcan:.70,teatable:.48,steppingstones:.76,fence:.80,fountain:.61,herbmarker:.33,birdbath:.50,sundial:.55,armillary:.59};
-  const effects={none:'关闭',petals:'风送花瓣',fireflies:'流萤微光',butterflies:'蝶影花径',prism:'花窗流彩',meteors:'流星天幕',aurora:'极光星图'};
+  const effects={none:'关闭',petals:'风送花瓣',fireflies:'流萤微光',butterflies:'蝶影花径',prism:'花窗流彩',meteors:'流星天幕',aurora:'极光星图',seedsong:'蒲公英飞絮',lanternsky:'万家灯火'};
   const rewards=[
     {at:1,id:'herbmarker',label:props.herbmarker},{at:2,id:'petals',label:effects.petals},
     {at:3,id:'birdbath',label:props.birdbath},{at:4,id:'fireflies',label:effects.fireflies},
     {at:5,id:'sundial',label:props.sundial},{at:6,id:'butterflies',label:effects.butterflies},
-    {at:8,id:'prism',label:effects.prism},{at:10,id:'armillary',label:props.armillary},
-    {at:12,id:'meteors',label:effects.meteors},{at:15,id:'aurora',label:effects.aurora}
+    {at:7,id:'seedsong',label:effects.seedsong},{at:8,id:'prism',label:effects.prism},{at:10,id:'armillary',label:props.armillary},
+    {at:12,id:'meteors',label:effects.meteors},{at:15,id:'aurora',label:effects.aurora},{at:18,id:'lanternsky',label:effects.lanternsky}
   ];
   function discoveries(records,previous=[]){
     const keys=new Set(Array.isArray(previous)?previous:[]);

@@ -15,7 +15,7 @@ function rewardIllustration(canvas,reward){
     }
     return;
   }
-  if(['butterflies','prism','meteors','aurora'].includes(reward.id)){
+  if(['butterflies','prism','meteors','aurora','seedsong','lanternsky'].includes(reward.id)){
     ctx.fillStyle=['meteors','aurora'].includes(reward.id)?'#293951':'#ede7d7';ctx.fillRect(0,0,176,104);
     paintRareEffect(ctx,reward.id,176,104,1.2);return;
   }

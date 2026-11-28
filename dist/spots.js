@@ -154,11 +154,15 @@ function openCampusMap(){
     paint();
   });
   canvas.tabIndex=0;
-  const rowBox=$('campusSpotRows');
+  const rowBox=$('campusSpotRows'),filter=document.createElement('button');
+  filter.type='button';filter.className='light';filter.textContent='只看有记录的点位';filter.setAttribute('aria-pressed','false');
+  filter.disabled=!rows.some(row=>row.count);
+  filter.onclick=()=>{const active=filter.getAttribute('aria-pressed')==='false';filter.setAttribute('aria-pressed',String(active));filter.textContent=active?'显示全部点位':'只看有记录的点位';for(const item of rowBox.children)item.hidden=active&&item.dataset.empty==='true'};
+  rowBox.before(filter);
   for(const row of rows){
     if(!row.id&&!row.count)continue;
     const button=document.createElement('button');
-    button.type='button';button.className='campusSpotRow';button.dataset.spot=row.id||'';
+    button.type='button';button.className='campusSpotRow';button.dataset.empty=String(!row.count);button.dataset.spot=row.id||'';
     button.setAttribute('aria-pressed',String(selected===(row.id||'')));
     const dot=document.createElement('span');dot.className='campusDot';dot.style.background=row.id?(CampusSpots.points.some(spot=>spot.id===row.id)?'#6d8b4f':'#c9cbbd'):'#c9cbbd';
     const name=document.createElement('strong');name.textContent=row.name;

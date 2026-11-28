@@ -176,7 +176,7 @@ const drawDuelTable=(()=>{
       const dx=cell%5-previous%5,dz=Math.floor(cell/5)-Math.floor(previous/5);
       if(Math.abs(dx)+Math.abs(dz)!==1)break;
       points.push([cell%5-2,.052,Math.floor(cell/5)-2]);visited.add(cell);previous=cell;
-      if(cell>=20||cell%5===4)break;
+      if(cell===24)break;
     }
     if(points.length<2)return;
     const weight=Math.max(1.3,Math.min(3.5,w*.005));

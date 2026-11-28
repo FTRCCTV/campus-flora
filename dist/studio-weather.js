@@ -1,7 +1,7 @@
 // Weather has a transparent surface so raindrops never trigger a mesh redraw.
 function paintStudioWeather(canvas,frame,zone,weather,seconds,effect='none'){
   paintStudioClimate(canvas,frame,zone,weather,seconds);
-  if(['butterflies','prism','meteors','aurora'].includes(effect)){
+  if(['butterflies','prism','meteors','aurora','seedsong','lanternsky'].includes(effect)){
     const ctx=canvas.getContext('2d');ctx.save();ctx.setTransform(frame.ratio,0,0,frame.ratio,0,0);
     paintRareEffect(ctx,effect,frame.width,frame.height,seconds);ctx.restore();return;
   }
@@ -29,6 +29,22 @@ function paintStudioWeather(canvas,frame,zone,weather,seconds,effect='none'){
 }
 // All paths are deterministic at a given time, including still photos and reduced motion.
 function paintRareEffect(ctx,effect,w,h,t){
+  if(effect==='seedsong'||effect==='lanternsky'){
+    const lantern=effect==='lanternsky';
+    for(let i=0;i<(lantern?15:23);i++){
+      const phase=i*2.4,s=.58+(i%5)*.15,x=w*((i*.618+.018*Math.sin(t*.65+phase))%1),y=h*(1-((i*.381+t*(.024+i%3*.006))%1));
+      ctx.save();ctx.translate(x,y);ctx.scale(s,s);
+      if(lantern){
+        const glow=ctx.createRadialGradient(0,0,1,0,0,16);glow.addColorStop(0,'#ffc269aa');glow.addColorStop(1,'#ffd87300');ctx.fillStyle=glow;ctx.fillRect(-16,-16,32,32);
+        ctx.fillStyle='#e69a60';ctx.beginPath();ctx.moveTo(-5,-7);ctx.lineTo(5,-7);ctx.lineTo(4,5);ctx.lineTo(-3,5);ctx.closePath();ctx.fill();ctx.fillStyle='#ffe3a1';ctx.fillRect(-2,3,4,2);
+      }else{
+        ctx.rotate(.4*Math.sin(phase+t));ctx.strokeStyle='#896f4d';ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(-2,9);ctx.stroke();ctx.strokeStyle='#fffdf0';ctx.beginPath();
+        for(let j=-3;j<=3;j++){ctx.moveTo(0,0);ctx.lineTo(j*1.7,-5+Math.abs(j)*.7)}ctx.stroke();
+      }
+      ctx.restore();
+    }
+    return;
+  }
   if(effect==='butterflies'){
     for(let i=0;i<6;i++){
       const phase=i*2.4,unit=Math.min(w,h)*.015;

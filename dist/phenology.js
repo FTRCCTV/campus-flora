@@ -48,7 +48,18 @@ const Phenology=(()=>{
     const summary=summarize(records);
     const header=monthNames.map(name=>'<span'+(monthNames.indexOf(name)+1===summary.month?' class="phenoNow"':'')+'>'+name+'</span>').join('');
     show('<div class="body phenoPanel"><div class="eyebrow">PHENOLOGY</div><h2>校园物候日历</h2><p>用你手记里的观察日期，排出一株植物在校园里被记录到的月份。记录越多，色调越深。</p><p class="phenoSummary" role="status">共 '+summary.records+' 条记录 · '+summary.species+' 个物种 · 本月有记录的物种 '+summary.current+' 个</p><div class="phenoGrid">'+header+'</div><div id="phenoRows"></div><p class="phenoNote">物候不等于花期，它只反映"被记录到"的月份；同一物种多观察几次，日历会更准。</p></div>');
-    const rows=$('phenoRows');
+    const rows=$('phenoRows'),months=document.querySelector('.phenoGrid');
+    const info=document.createElement('p');info.setAttribute('role','status');info.className='monthReadout';months.after(info);
+    for(const [index,label] of Array.from(months.children).entries()){
+      const button=document.createElement('button');button.type='button';button.className=label.className;button.textContent=label.textContent;button.setAttribute('aria-pressed','false');label.replaceWith(button);
+      button.onclick=()=>{
+        const active=button.getAttribute('aria-pressed')==='false';
+        for(const item of months.children)item.setAttribute('aria-pressed',String(active&&item===button));
+        const found=summary.rows.filter(row=>row.months[index]>0);
+        info.textContent=active?monthNames[index]+' · '+found.length+' 个物种有观察记录':'';
+        Array.from(rows.children).forEach((line,i)=>{line.hidden=active&&!summary.rows[i]?.months[index]});
+      };
+    }
     if(!summary.rows.length){
       rows.textContent='还没有带日期的观察记录。种下一株植物后，这里会长出它的季节。';
       return;

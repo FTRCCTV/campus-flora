@@ -16,14 +16,14 @@ test('every unobstructed flight is shortest and stops on first scoring edge',()=
   }
 });
 test('published route is stable until affected, includes the winning edge and matches each flight',()=>{
-  const s=game.create(()=>0);assert.deepEqual(s.forecast,[1,2,3,4]);
+  const s=game.create(()=>0);assert.deepEqual(s.forecast,[1,2,3,4,9,14,19,24]);
   game.play(s,game.basic,1,()=>.9);
   assert.equal(s.forecast[0],5);assert.ok(!s.forecast.includes(1));
   const initial=[...s.forecast];game.play(s,null,null,()=>0);
   assert.equal(s.pos,initial[0]);assert.deepEqual(s.forecast,initial.slice(1));
   while(s.winner===null){
     const route=[...s.forecast];game.play(s,null,null,()=>0);assert.deepEqual(s.forecast,route);
-    game.play(s,null,null,()=>.99);assert.equal(s.pos,route[0]);assert.deepEqual(s.forecast,route.slice(1));
+    game.play(s,null,null,()=>.99);assert.equal(s.pos,route[0]);assert.deepEqual(s.forecast,s.winner===null?route.slice(1):[]);
   }
   const t=game.create(()=>0);game.play(t,game.basic,24,()=>0);
   assert.equal(t.wandering,true);assert.deepEqual(t.forecast,[1]);
