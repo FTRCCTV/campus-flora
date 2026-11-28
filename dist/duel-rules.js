@@ -19,9 +19,10 @@ const ButterflyDuel=(()=>{
     if(c>4)n.push(c-5);
     return n;
   }
-  function create(){
-    return {cells:Array(25).fill(null),pos:0,round:1,turn:0,actions:0,winner:null,
+  function create(random=Math.random){
+    const s={cells:Array(25).fill(null),pos:0,round:1,turn:0,actions:0,winner:null,
       plan:[],last:['蝴蝶从 A1 出发。'],trial:[true,true],cool:[{},{}],trail:[0]};
+    planFlight(s,random);return s;
   }
   const coord=c=>'ABCDE'[c%5]+(1+Math.floor(c/5));
   function paths(s){
@@ -42,32 +43,41 @@ const ButterflyDuel=(()=>{
     for(const c of list){r-=weights(c);if(r<0)return c}
     return list.at(-1);
   }
-  function fly(s,random){
-    const {dist,count}=paths(s),from=s.pos;
-    let next,msg='';
-    if(dist[from]<0){
-      const adjacent=neighbors(from),open=adjacent.filter(c=>!hard(s.cells[c]));
-      next=pick(open.length?open:adjacent,()=>1,random);s.plan=[];
-      msg=open.length?'终点路线被封，蝴蝶随机游走':'四周全封，蝴蝶随机越障一格';
-    }else{
-      const options=c=>neighbors(c).filter(n=>dist[n]===dist[c]-1);
-      const choices=options(from),flowers=choices.filter(n=>s.cells[n]?.type==='nectar');
-      const wind=s.cells[from]?.type==='wind'?s.cells[from]:null;
-      const blown=wind?from+(wind.owner===0?5:1):-1;
-      const candidates=flowers.length?flowers:wind&&choices.includes(blown)?[blown]:choices;
-      if(wind)s.cells[from]=null;
-      const valid=s.plan.length===dist[from]&&candidates.includes(s.plan[0])&&
-        s.plan.every((n,i)=>options(i?s.plan[i-1]:from).includes(n));
-      if(!valid){
-        s.plan=[pick(candidates,c=>count[c],random)];
-        while(s.plan.at(-1)!==24)s.plan.push(pick(options(s.plan.at(-1)),c=>count[c],random));
-      }
-      next=s.plan.shift();
-      msg=flowers.length?'花香引路':wind&&next===blown?'风种引路':next<from?'沿最短路绕行':'沿最短路飞行';
+  function planFlight(s,random=Math.random){
+    if(s.winner!==null){s.forecast=[];s.plan=[];return}
+    const {dist,count}=paths(s),prior=s.plan||[];
+    if(dist[s.pos]<0){
+      const adjacent=neighbors(s.pos),open=adjacent.filter(n=>!hard(s.cells[n]));
+      const trapped=!open.length,choices=trapped?adjacent:open;
+      const keep=s.wandering&&s.trapped===trapped&&choices.includes(prior[0]);
+      s.plan=[keep?prior[0]:pick(choices,()=>1,random)];
+      s.forecast=[...s.plan];s.wandering=true;s.trapped=trapped;return;
     }
+    const previous=new Map();let cursor=s.pos;
+    if(!s.wandering)for(const n of prior){previous.set(cursor,n);cursor=n}
+    s.wandering=false;s.trapped=false;s.plan=[];cursor=s.pos;
+    while(cursor!==24){
+      const steps=neighbors(cursor).filter(n=>dist[n]===dist[cursor]-1);
+      const flowers=steps.filter(n=>s.cells[n]?.type==='nectar'),wind=s.cells[cursor];
+      const blown=wind?.type==='wind'?cursor+(wind.owner===0?5:1):-1;
+      const choices=flowers.length?flowers:steps.includes(blown)?[blown]:steps;
+      const next=choices.includes(previous.get(cursor))?previous.get(cursor):pick(choices,n=>count[n],random);
+      s.plan.push(next);cursor=next;
+    }
+    const edge=s.plan.findIndex(n=>n>=20||n%5===4);
+    s.forecast=s.plan.slice(0,edge<0?s.plan.length:edge+1);
+  }
+  function fly(s,random=Math.random){
+    planFlight(s,random);if(!s.plan.length)return;
+    const from=s.pos,next=s.plan.shift(),tile=s.cells[from];
+    const blown=tile?.type==='wind'?from+(tile.owner===0?5:1):-1;
+    const msg=s.wandering?(s.trapped?'四周全封，蝴蝶随机越障一格':'终点路线被封，蝴蝶随机游走'):
+      s.cells[next]?.type==='nectar'?'花香引路':next===blown?'风种引路':next<from?'沿最短路绕行':'沿最短路飞行';
+    if(!s.wandering&&tile?.type==='wind')s.cells[from]=null;
     if(s.cells[next]?.type==='nectar')s.cells[next]=null;
     s.pos=next;s.trail=[...s.trail.slice(-23),next];s.last.push(msg+' · '+coord(from)+' → '+coord(next));
     if(next>=20||next%5===4)s.winner=next>=20?0:1;
+    planFlight(s,random);
   }
   function check(s,card,cell){
     if(s.winner!==null)throw Error('这局已经结束。');
@@ -95,8 +105,8 @@ const ButterflyDuel=(()=>{
     if(++s.actions===2){
       fly(s,random);s.actions=0;
       if(s.winner===null){s.round++;s.turn=(s.round-1)%2}
-    }else s.turn=1-p;
+    }else {s.turn=1-p;planFlight(s,random)}
   }
-  return {standards,types,sides,basic,tool,hard,coord,create,check,play,paths,fly};
+  return {standards,types,sides,basic,tool,hard,coord,create,check,play,paths,planFlight,fly};
 })();
 globalThis.ButterflyDuel=ButterflyDuel;

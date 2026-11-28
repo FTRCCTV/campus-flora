@@ -41,14 +41,12 @@ function drawHabitat({zone,scene,weather,extent,angle,face,box,pillar,ring,recta
       for(let i=0;i<b.length;i++){const k=(i+1)%b.length;face([a[i],a[k],b[k],b[i]],leaves[(i+1)%3]);face([b[i],b[k],[px-.04,cy+r*.82,pz]],leaves[1+i%3])}
     }
   }
-  // Six engraved characters on an original campus name wall. The strokes are
-  // coplanar convex quads so they pick up the same camera and depth as the stone.
-  function campusNameWall(cx,z){
-    const w=Math.min(3.04,extent*.94),stone=['#a39479','#b7a98c','#c9bc9f','#e3d7b9'];
-    box(cx,.005,z,w+.12,.17,.42,slate);
-    box(cx,.175,z,w,.75,.23,stone);
-    box(cx,.925,z,w+.08,.085,.28,snow?chalk:stone);
-    const front=z+.117,letters=[
+  // Field-station label, low enough for the planting to frame its silhouette.
+  function campusFieldLabel(cx,z){
+    const w=Math.min(1.12,extent*.40),front=z+.026;
+    for(const side of [-1,1])box(cx+side*w*.31,.015,z-.03,.045,.44,.05,walnut);
+    box(cx,.37,z,w,.25,.048,green);
+    const letters=[
       [[1,2.5,1,7.5],[1,2.5,8.8,2.5,8.8,7.5],[1,7,8.8,7],[5,.4,5,9.7]], // 中
       [[.7,.7,.7,9.4],[.7,.7,9,.7,9,9.4],[.7,9,9,9],[2.2,2.7,7.6,2.7],[4.8,2.7,4.8,7.2],[2.6,4.9,7,4.9],[2.1,7.2,7.9,7.2],[6.4,5.7,7.5,6.6]], // 国
       [[1,3.7,1.4,2.1,9.2,2.1,8.4,3.6],[5.6,.3,5,2.6,3.4,4.8,1.1,6.3],[3.9,4.5,3.9,9.1,6.1,7.6],[5.1,3.5,6.1,5.9,7.4,7.7,9.6,9],[8.7,4.3,6.7,6]], // 农
@@ -56,16 +54,45 @@ function drawHabitat({zone,scene,weather,extent,angle,face,box,pillar,ring,recta
       [[.6,3.6,9.4,3.6],[5.2,.45,5,3.8,4.4,5.9,3,7.8,.7,9.3],[5,3.9,6,6.2,7.6,8,9.4,9.2]], // 大
       [[1.8,.7,2.8,2.1],[4.3,.4,5.1,1.9],[7.9,.5,6.7,2.2],[.8,4.1,1,2.8,9,2.8,8.7,4.2],[2.7,4.7,7.2,4.7,5.2,6.1],[5.2,6.1,5.2,8.9,4.7,9.4,3.4,9.1],[.6,6.9,9.4,6.9]] // 学
     ];
-    const cell=w*.144,font=cell*.86,stroke=.053*font,ink='#673731';
+    const cell=w*.144,font=cell*.83,stroke=.054*font,ink='#efe8ce';
     letters.forEach((glyph,index)=>{
       const left=cx+(index-2.5)*cell-font*.5;
       for(const points of glyph)for(let j=2;j<points.length;j+=2){
-        const x1=left+points[j-2]*font/10,y1=.57+font*(.5-points[j-1]/10);
-        const x2=left+points[j]*font/10,y2=.57+font*(.5-points[j+1]/10);
+        const x1=left+points[j-2]*font/10,y1=.495+font*(.5-points[j-1]/10);
+        const x2=left+points[j]*font/10,y2=.495+font*(.5-points[j+1]/10);
         const len=Math.hypot(x2-x1,y2-y1),dx=(y2-y1)*stroke/len,dy=(x1-x2)*stroke/len;
         face([[x1-dx,y1-dy,front],[x2-dx,y2-dy,front],[x2+dx,y2+dy,front],[x1+dx,y1+dy,front]],ink);
       }
     });
+  }
+  // Folded leaves and clustered flower heads share a small, fixed face budget.
+  function borderPlant(x,base,z,h,seed,kind){
+    const blade=snow?'#acbbaa':wet?'#618477':'#73947a';
+    const fold=snow?'#d5dfcc':wet?'#416b60':'#51775c';
+    for(let i=0;i<5;i++){
+      const a=seed+i*2.4,dx=Math.cos(a),dz=Math.sin(a),r=h*(.27+.045*(i%3));
+      const root=[x,base,z],tip=[x+dx*r,base+h*(.42+.095*(i%3)),z+dz*r];
+      const mx=x+dx*r*.46,mz=z+dz*r*.46,y=base+h*.36,b=h*.074;
+      const ridge=[mx,y+.024,mz];
+      face([root,[mx-dz*b,y,mz+dx*b],tip,ridge],blade);
+      face([root,ridge,tip,[mx+dz*b,y,mz-dx*b]],fold);
+    }
+    if(kind==='grass')return;
+    const top=base+h,dx=.035*Math.cos(seed),dz=.035*Math.sin(seed);
+    pillar(x,base,z,.012,.012,h,[fold,blade,fold,blade],4,.68);
+    if(kind==='reed'){
+      pillar(x,top,z,.034,.033,h*.25,['#81664b','#927451','#866548',snow?'#d0c4a5':'#aa8965'],6,.83);
+    }else{
+      const r=h*.14,petals=kind==='sage'?['#877693','#a38cab','#bcacbe']:['#c29f66','#e2c388','#f2deac'];
+      const lower=ring(x,top-h*.11,z,r,r*.89,5,seed),upper=ring(x+dx*.28,top,z+dz*.28,r*.76,r*.74,5,seed+.18);
+      for(let i=0;i<5;i++)face([lower[i],lower[(i+1)%5],upper[(i+1)%5],upper[i]],petals[i%2]);
+      face(upper,snow?'#e5e6d7':petals[2]);
+    }
+  }
+  function gravelStone(x,z,rx,rz,seed,h){
+    const base=ring(x,.008,z,rx,rz,6,seed),cap=ring(x-rx*.11,h,z+rz*.09,rx*.78,rz*.81,6,seed+.08);
+    for(let i=0;i<6;i++)face([base[i],base[(i+1)%6],cap[(i+1)%6],cap[i]],i%2?'#8c9282':'#a4a594');
+    face(cap,snow?'#e1e6db':wet?'#95a397':'#c2c1a9');
   }
   function trialWheat(){
     const x=-extent-.34,z=-edge*.16,depth=2.24;
@@ -298,6 +325,12 @@ function drawHabitat({zone,scene,weather,extent,angle,face,box,pillar,ring,recta
       for(const y of [.97,1.26])box(x,y,z+.18,.70,.04,.055,walnut);
     }
     tree(edge-.12,rear+.58,1.8,.65);
+    // Asymmetric stone-and-iris border alongside the moon gate.
+    for(let i=0;i<5;i++){
+      const z=-edge*.65+i*.42;
+      gravelStone(-extent-.32,z,.16+(i%2)*.05,.17,i*.8,.08+(i%3)*.03);
+      borderPlant(-extent-.37,0,z+.19,.29+(i%3)*.10,i,i%2?'sage':'grass');
+    }
   }else if(scene==='terrace'){
     const iron=['#546c69','#6c827a','#789087','#8d9b89'];
     // Rooftop potting greenhouse, glazed in separate bays with a pitched roof.
@@ -336,6 +369,11 @@ function drawHabitat({zone,scene,weather,extent,angle,face,box,pillar,ring,recta
     rearFooting(hvX,rear,hvW+.09,.57);
     box(hvX,0,rear,hvW,.57,.48,slate);
     for(let j=0;j<6;j++)box(hvX-.39+j*.155,.14,rear+.25,.058,.31,.03,metal);
+    // A narrow aromatic herb trough in the lee of the glasshouse.
+    const bedX=-extent-.31,bedZ=-edge*.32;
+    box(bedX,0,bedZ,.48,.24,1.72,brick);
+    face(rectangle(bedX,.244,bedZ,.41,1.63),snow?'#d6dbca':'#716752');
+    for(let i=0;i<6;i++)borderPlant(bedX+(i%2-.5)*.13,.245,bedZ-.67+i*.27,.25+.08*(i%3),i+.4,i%3?'sage':'grass');
   }else{
     const x=edge*.43,z=rear-.08,w=Math.min(2.91,extent*.96);
     // Brick campus gatehouse and lit courtyard windows.
@@ -360,14 +398,28 @@ function drawHabitat({zone,scene,weather,extent,angle,face,box,pillar,ring,recta
     box(x,.53,z+.382,.32,.028,.024,oak);
     box(x+.125,.39,z+.393,.031,.064,.029,brass);
     if(zone==='pond'){
-      face(ring(-edge*.43,.015,rear,Math.min(1.62,edge*.43),.41,18),'#6da098');
-      for(let i=0;i<5;i++)face(ring(-edge*.65+i*.24,.027,rear+.15*Math.sin(i),.09,.07,7),'#97a96f');
+      const pondZ=rear+.24,pondX=-edge*.43,radius=Math.min(1.62,edge*.43);
+      face(ring(pondX,.011,pondZ,radius,.28,18),snow?'#d4dccc':'#97a387');
+      face(ring(pondX,.015,pondZ,radius*.96,.24,18),snow?'#adc4c0':wet?'#618e87':'#76a79a');
+      for(let i=0;i<5;i++)face(ring(pondX+radius*(-.62+i*.21),.027,pondZ+.10*Math.sin(i),.09,.07,7),'#97a96f');
+      for(let i=0;i<5;i++)borderPlant(pondX+.23*(i-2),.022,pondZ+.20+.025*Math.sin(i),.38+.055*(i%3),i+.25,i%2?'grass':'reed');
     }else if(scene==='campus'){
-      campusNameWall(-edge*.43,rear+.055);
+      const bedX=-edge*.43,bedZ=rear+.24;
+      face(ring(bedX,.012,bedZ,1.08,.24,11,.23),snow?'#dce1cf':'#889375');
+      for(const [dx,dz,h,kind] of [[-.83,.02,.35,'sage'],[-.66,-.09,.48,'sage'],[-.47,.13,.23,'gold'],[.45,.10,.24,'grass'],[.66,.04,.39,'gold'],[.86,-.04,.46,'sage']]){
+        borderPlant(bedX+dx,.015,bedZ+dz,h,dx*4,kind);
+      }
+      campusFieldLabel(bedX,bedZ-.03);
       trialWheat();
     }else{
       for(let k=0;k<5;k++)pillar(-edge+(.10+.11*k)*edge,.02,rear,.055,.055,.55,walnut,6);
       box(-edge*.67,.32,rear,edge*.46,.045,.065,oak);
+    }
+    // Worn pavers and verge stay on the margin of the editable plot.
+    for(let i=0;i<5;i++){
+      const z=-edge*.46+i*.48;
+      gravelStone(extent+.30+.025*Math.sin(i),z,.20,.19,i*.72,.036);
+      if(i%2===0)borderPlant(extent+.49,0,z+.21,.27+.055*i,i+.73,night?'gold':'grass');
     }
     tree(-edge+.12,rear+.53,1.97,.72);
     if(night){

@@ -45,6 +45,11 @@ function renderPlantCare(plant,panel=$('carePanel'),compact=false){
   }
   meter('总成长',percent,100,'%');
   if(stage<3)for(const k of Object.keys(goals))meter(careNames[k],care[k],goals[k],' / '+goals[k]);
+  if(compact){
+    const details=document.createElement('details');
+    const summary=document.createElement('summary');summary.textContent='成长记录 · '+percent+'%';
+    details.append(summary,track,panel.querySelector('.careMeters'));panel.append(details);
+  }
   const status=panel.querySelector('.careStatus'),buttons=panel.querySelector('.careActions');
   if(blocked)status.textContent='保存或取消布置后可以照料。';
   else if(stage>=3)status.textContent='植株已成熟，浇水和施肥会记入照料次数。';
@@ -61,13 +66,22 @@ function renderPlantCare(plant,panel=$('carePanel'),compact=false){
         if(!compact&&panel.isConnected&&modal.open&&updated)detail(localPlantTraits(updated));
         const message=k==='harvest'?'种子已收入种子袋。':(updated?.growth??2)>stage?plant.name+'进入「'+nurseryStages[stage+1][0]+'」阶段。':plant.name+'已完成'+careVerbs[k]+'。';
         toast(message);
+        const action=panel.querySelector('[data-care="'+k+'"]');
+        if(action&&!matchMedia('(prefers-reduced-motion:reduce)').matches)action.animate(
+          [{boxShadow:'0 0 0 0 rgba(46,125,96,.55)'},{boxShadow:'0 0 0 9px rgba(46,125,96,0)'}],{duration:620});
       }catch(e){if(panel.isConnected){status.textContent=e.message;usable.forEach(el=>el.disabled=false)}}
     };buttons.append(b);
   }
 }
 function renderGardenCare(){
   const sheet=$('gardenCare'),select=$('carePick'),list=visitingGarden?[]:readGarden();
-  sheet.hidden=!studioOwner()||!list.length||!!visitingGarden;if(sheet.hidden||!sheet.open)return;
+  sheet.hidden=!!visitingGarden;if(sheet.hidden)return;
+  select.closest('label').hidden=!list.length;
+  if(!list.length){
+    const body=$('gardenCareBody');body.className='careEmpty';
+    body.textContent=studioOwner()?'收集并种下第一株植物，就可以在这里浇水、施肥。':'进入自己的花园后，就可以在这里浇水、施肥。';
+    return;
+  }
   const selected=select.value;
   select.replaceChildren(...list.map(p=>new Option(p.name+' · '+placementName(p),p.uid)));
   select.value=list.some(p=>p.uid===selected)?selected:(list.find(p=>p.zone===zone)||list[0]).uid;

@@ -285,5 +285,5 @@ for(const input of [$('cam'),$('file')])input.onchange=async()=>{
     preview(item.photo,'识别这株植物','<p>将这张照片经植迹在线服务发送至 Pl@ntNet，获取候选物种。</p><button class="primary" id="identify">开始识别</button>');$('identify').onclick=()=>identifyPhoto(item,context);
   }catch{show('<div class="body"><h2>照片读取失败</h2><p>请尝试 JPG、PNG 或 WebP 格式。</p></div>')}
 };
-$('gardenCare').ontoggle=renderGardenCare;$('carePick').onchange=renderGardenCare;
+$('carePick').onchange=renderGardenCare;
 initStudio();window.addEventListener('hashchange',route);setAccountButton();route();if(!localGardenOnly)void refreshAccount();

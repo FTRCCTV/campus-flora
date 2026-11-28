@@ -2,6 +2,7 @@
 // faces and draw order as the picture, including leaves which overhang a tile.
 const drawDuelTable=(()=>{
   const cache=new WeakMap(),tau=Math.PI*2;
+  const reducedMotion=globalThis.matchMedia?.('(prefers-reduced-motion: reduce)');
   const pitch=.78,slope=Math.sin(pitch),up=Math.cos(pitch);
   const turf=['#d9d7ae','#c2c99a'],brass=['#a1844e','#c6a15e','#efd399'];
   const owners=[['#245a51','#478777','#88b9a3'],['#954a32','#c3764f','#e9ab7e']];
@@ -165,24 +166,59 @@ const drawDuelTable=(()=>{
       for(let n=0;n<9;n++)blade(mesh,x,h+n*.012,z,n*2.4,.28-n*.01,.18+n*.023,.083-n*.005,green,cell);
     }
   }
-  function butterfly(mesh,x,y,z,phase,cell){
-    // Layer the amber forewings, pale hindwings and eyespots on dark wing membranes.
-    const lift=.58+.23*Math.sin(Math.PI*phase),spread=1.04-Math.sin(Math.PI*phase)*.18;
-    for(const side of [-1,1]){
-      const wing=(u,v,raise=0)=>[x+side*u*spread,y+u*lift+raise,z+v];
-      const patch=(points,color,lift=0)=>mesh.face(points.map(([u,v])=>wing(u,v,lift)),color,cell);
-      patch([[0,-.06],[.12,-.24],[.34,-.31],[.39,-.25],[.31,-.03],[.18,.07],[.036,.05]],'#403d37');
-      patch([[.032,-.055],[.16,-.215],[.32,-.253],[.28,-.09],[.16,.022]],'#ed9955',.006);
-      patch([[.055,-.065],[.20,-.19],[.26,-.205],[.18,-.078]],'#fad277',.011);
-      patch([[0,.015],[.21,-.01],[.31,.08],[.28,.19],[.14,.24],[.032,.165]],'#4c483b');
-      patch([[.035,.043],[.179,.017],[.253,.09],[.215,.16],[.13,.20],[.054,.14]],'#d58248',.008);
-      for(const [u,v] of [[.336,-.239],[.305,-.183],[.28,.087],[.218,.17]]){
-        patch([[u-.015,v],[u,v-.018],[u+.014,v],[u,v+.018]],'#f7e4ab',.014);
-      }
-      const root=wing(.012,-.12),tip=wing(.075,-.248,.066);
-      mesh.face([root,[root[0]+.012,root[1],root[2]],tip],'#504738',cell);
+  function drawForecast(ctx,project,pos,forecast,w){
+    if(!Array.isArray(forecast)||pos>=20||pos%5===4)return;
+    const points=[[pos%5-2,.052,Math.floor(pos/5)-2]],visited=new Set([pos]);
+    let previous=pos;
+    for(const cell of forecast){
+      if(cell===pos&&points.length===1)continue;
+      if(!Number.isInteger(cell)||cell<0||cell>=25||visited.has(cell))break;
+      const dx=cell%5-previous%5,dz=Math.floor(cell/5)-Math.floor(previous/5);
+      if(Math.abs(dx)+Math.abs(dz)!==1)break;
+      points.push([cell%5-2,.052,Math.floor(cell/5)-2]);visited.add(cell);previous=cell;
+      if(cell>=20||cell%5===4)break;
     }
-    mesh.face([[x-.024,y+.015,z-.13],[x+.023,y+.018,z-.14],[x+.032,y+.023,z+.05],[x,y+.018,z+.185],[x-.026,y+.02,z+.03]],'#423d32',cell);
+    if(points.length<2)return;
+    const weight=Math.max(1.3,Math.min(3.5,w*.005));
+    ctx.save();ctx.lineJoin='round';ctx.lineCap='round';
+    trace(ctx,project,points,'#fff4d1df',weight*2.1);
+    trace(ctx,project,points,'#366d65',weight);
+    for(let i=1;i<points.length;i++){
+      const [x,y,z]=points[i-1],dx=points[i][0]-x,dz=points[i][2]-z;
+      const arrow=[[.73,0],[.50,.105],[.54,0],[.50,-.105]].map(([a,b])=>[x+dx*a-dz*b,y,z+dz*a+dx*b]);
+      polygon(ctx,arrow.map(project),'#315f58');
+    }
+    const [x,y,z]=points.at(-1);
+    polygon(ctx,ring(x,y,z,.10,.10).map(project),'#fff4d1');
+    polygon(ctx,ring(x,y,z,.058,.058).map(project),'#315f58');ctx.restore();
+  }
+  function butterfly(mesh,x,y,z,yaw,flap,bank,cell){
+    const cs=Math.cos(yaw),sn=Math.sin(yaw);
+    const place=(u,h,v)=>[x+u*cs-v*sn,y+h,z+u*sn+v*cs];
+    for(const side of [-1,1]){
+      const tilt=flap+side*bank,spread=Math.cos(tilt),lift=Math.sin(tilt);
+      const wing=([u,v])=>place(side*u*spread,u*lift,v);
+      // Adjacent panels share their edges so the painter never hides the amber
+      // markings behind a dark membrane as the table turns.
+      function fan(root,outline,colors){
+        const inset=outline.map(([u,v])=>[root[0]+(u-root[0])*.79,root[1]+(v-root[1])*.79]);
+        for(let i=1;i<outline.length;i++){
+          mesh.face([root,inset[i-1],inset[i]].map(wing),colors[(i-1)%colors.length],cell);
+          mesh.face([inset[i-1],outline[i-1],outline[i],inset[i]].map(wing),i===3?'#f6d790':'#574838',cell);
+        }
+      }
+      fan([.012,-.045],[[.045,-.12],[.22,-.276],[.39,-.33],[.424,-.26],[.345,-.083],[.21,.024],[.03,.058]],['#ed9d4b','#f7c66b','#ffe09c','#ec9d49','#cf713a','#e6a054']);
+      fan([.014,.046],[[.21,.024],[.332,.058],[.32,.15],[.23,.23],[.13,.26],[.034,.17]],['#db8741','#f0b768','#efb768','#d88c4d','#b87342']);
+      mesh.face([place(side*.008,.025,-.12),place(side*.026,.025,-.12),place(side*.073,.09,-.245)],'#514434',cell);
+    }
+    mesh.face([place(-.024,.025,-.14),place(.025,.032,-.14),place(.032,.035,.026),place(0,.02,.19),place(-.03,.035,.036)],'#433b32',cell);
+  }
+  function heading(from,to,fallback){
+    if(from==null||to==null||from===to)return fallback;
+    return Math.atan2(to%5-from%5,Math.floor(from/5)-Math.floor(to/5));
+  }
+  function turn(from,to,amount){
+    return from+Math.atan2(Math.sin(to-from),Math.cos(to-from))*amount;
   }
   function prepare(canvas,angle){
     const w=Math.max(1,canvas.clientWidth||canvas.width||480),h=Math.max(1,canvas.clientHeight||canvas.height||380);
@@ -196,10 +232,11 @@ const drawDuelTable=(()=>{
     const project=projector(w,h,angle);
     model={key,w,h,dpr,base,project,...drawBase(ctx,w,h,project)};cache.set(canvas,model);return model;
   }
-  return function drawDuelTable(canvas,{board=null,angle=.25,highlight=-1,legal,flight=1}={}){
+  return function drawDuelTable(canvas,{board=null,angle=.25,highlight=-1,legal,flight=1,phase=0}={}){
     const {w,h,dpr,base,centers,picks,project}=prepare(canvas,angle);
     const ctx=canvas.getContext('2d');ctx.setTransform(1,0,0,1,0,0);ctx.drawImage(base,0,0);ctx.setTransform(dpr,0,0,dpr,0,0);
     const foreground=[],mesh=builder(project),pos=board?.pos??0;
+    drawForecast(ctx,project,pos,board?.forecast,w);
     for(let i=0;i<25;i++){
       const x=i%5-2,z=Math.floor(i/5)-2,tile=board?.cells[i],marked=highlight===i;
       if(marked||legal?.[i]===false){
@@ -213,11 +250,21 @@ const drawDuelTable=(()=>{
         polygon(ctx,ring(x,.045,z,.063,.063,10).map(project),'#788e67');
       }
     }
-    const last=board?.trail?.at(-2)??pos,t=Math.max(0,Math.min(1,flight));
-    const x=(last%5+(pos%5-last%5)*t)-2,z=(Math.floor(last/5)+(Math.floor(pos/5)-Math.floor(last/5))*t)-2;
-    const height=(board?.cells[pos] ? .48 : .22)+Math.sin(Math.PI*t)*.26;
-    polygon(ctx,ring(x+.025,.045,z+.052,.23,.14,14).map(project),'#5d56322c');
-    butterfly(mesh,x,height,z,t,pos);mesh.flush(ctx,foreground);
+    const last=board?.trail?.at(-2)??pos,still=reducedMotion?.matches;
+    const t=still||last===pos?1:Math.max(0,Math.min(1,flight)),p=t*t*(3-2*t);
+    const seconds=still||!Number.isFinite(phase)?0:phase;
+    const dx=pos%5-last%5,dz=Math.floor(pos/5)-Math.floor(last/5);
+    const arc=Math.sin(Math.PI*p),bow=arc*.085;
+    const x=last%5-2+dx*p-dz*bow,z=Math.floor(last/5)-2+dz*p+dx*bow;
+    const fromHeight=board?.cells?.[last] ? .63 : .23;
+    const toHeight=board?.cells?.[pos] ? .63 : .23;
+    const height=fromHeight+(toHeight-fromHeight)*p+arc*.3+.018*Math.sin(seconds*tau*.65);
+    const ahead=board?.forecast?.find(cell=>cell!==pos),course=heading(last,pos,heading(pos,ahead,2.6));
+    const approach=heading(board?.trail?.at(-3),last,course),departure=heading(pos,ahead,course);
+    const yaw=turn(turn(approach,course,Math.min(1,p*4)),departure,Math.max(0,(p-.72)/.28));
+    const flap=.53+.38*Math.sin(seconds*tau*.95+t*tau*2),bank=.11*arc;
+    polygon(ctx,ring(x+.025,.045,z+.052,.21-.055*arc,.13-.03*arc,14).map(project),'#5d56322c');
+    butterfly(mesh,x,height,z,yaw,flap,bank,pos);mesh.flush(ctx,foreground);
     const font=Math.max(10,Math.min(15,w*.025));
     function sideBadge(p,label,color){
       const [bx,by]=project(p);ctx.fillStyle=color;ctx.beginPath();

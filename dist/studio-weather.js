@@ -81,6 +81,64 @@ function paintRareEffect(ctx,effect,w,h,t){
     ctx.strokeStyle=tail;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+w*.075,y-h*.065);ctx.stroke();
   }
 }
+// Each stream has an independent depth, phase and falling speed. A fresh seed
+// at the top of each pass moves its entry point without jumping mid-flight.
+function weatherRandom(seed){
+  seed=Math.imul(seed^(seed>>>16),0x21f0aaad);
+  seed=Math.imul(seed^(seed>>>15),0x735a2d97);
+  return ((seed^(seed>>>15))>>>0)/4294967296;
+}
+function makeWeatherStreams(snow){
+  return Array.from({length:144},(_,i)=>{
+    const seed=(snow?32291:13081)+i*29;
+    const depth=.16+.84*weatherRandom(seed+1)**1.4;
+    return {seed,depth,start:weatherRandom(seed+2),
+      speed:(snow?20+42*depth:220+285*depth)*(.82+.37*weatherRandom(seed+3)),
+      drift:snow?7+13*depth+8*weatherRandom(seed+4):4+25*depth+42*weatherRandom(seed+4),
+      swing:(snow?5:1.4)+depth*(snow?10:2.2),
+      tempo:.7+weatherRandom(seed+5)*1.8,phase:weatherRandom(seed+6)*Math.PI*2,
+      size:(snow?.52+1.8*depth:.50+.72*depth)*(.83+.38*weatherRandom(seed+7)),
+      alpha:(snow?.38:.28)+depth*.32+weatherRandom(seed+8)*.14,
+      exposure:.021+.015*weatherRandom(seed+9),pale:weatherRandom(seed+10)>.36};
+  }).sort((a,b)=>a.depth-b.depth);
+}
+const studioPrecipitation={rain:makeWeatherStreams(false),snow:makeWeatherStreams(true)};
+function weatherWind(t){
+  return 18*Math.sin(t*.63)+9*Math.sin(t*1.17+.9)+15*Math.sin(t*.28+2.7);
+}
+function drawStudioPrecipitation(ctx,type,w,h,seconds,opacity){
+  if(!w||!h)return;
+  const snow=type==='snow',streams=studioPrecipitation[type];
+  // Work in fixed scene-height units so a high-resolution photo keeps the composition.
+  const scale=h/480,width=w/scale,pad=28,travel=480+2*pad,span=width+2*pad;
+  const count=Math.min(streams.length,Math.max(30,Math.round(width/(snow?8.8:6.9))));
+  const wind=weatherWind(seconds),windSpeed=11.34*Math.cos(seconds*.63)+10.53*Math.cos(seconds*1.17+.9)+4.2*Math.cos(seconds*.28+2.7);
+  ctx.save();ctx.scale(scale,scale);ctx.lineCap='round';
+  for(let i=0;i<count;i++){
+    const p=streams[Math.floor(i*streams.length/count)];
+    const passes=p.start+seconds*p.speed/travel,cycle=Math.floor(passes),progress=passes-cycle;
+    const age=progress*travel/p.speed,born=seconds-age;
+    const entry=weatherRandom(p.seed^Math.imul(cycle+1,0x9e3779b1))*span;
+    const twist=seconds*p.tempo+p.phase,eddy=p.swing*Math.sin(twist);
+    const response=.45+.75*p.depth;
+    let x=entry+age*p.drift+response*(wind-weatherWind(born))+eddy;
+    if(snow)x+=p.swing*.38*Math.sin(.47*twist+entry*.01);
+    x=x-Math.floor(x/span)*span-pad;
+    const y=progress*travel-pad+(snow?1.8*Math.sin(twist*1.34):0);
+    ctx.globalAlpha=opacity*p.alpha;
+    ctx.beginPath();
+    if(snow){
+      const flutter=.65+.27*Math.sin(twist*.81);
+      ctx.fillStyle=p.pale?'#fffaf1':'#dbe8ef';
+      ctx.ellipse(x,y,p.size,p.size*flutter,twist*.38,0,Math.PI*2);ctx.fill();
+    }else{
+      const vx=p.drift+response*windSpeed+p.swing*p.tempo*Math.cos(twist);
+      ctx.lineWidth=p.size;ctx.strokeStyle=p.pale?'#dfedf5':'#a9c6d6';
+      ctx.moveTo(x-vx*p.exposure,y-p.speed*p.exposure);ctx.lineTo(x,y);ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
 function paintStudioClimate(canvas,frame,zone,weather,seconds){
   const {width:w,height:h,ratio}=frame,pw=Math.round(w*ratio),ph=Math.round(h*ratio);
   if(canvas.width!==pw||canvas.height!==ph){canvas.width=pw;canvas.height=ph}
@@ -102,20 +160,7 @@ function paintStudioClimate(canvas,frame,zone,weather,seconds){
       ctx.fillStyle=glow;ctx.fillRect(x-rx,y-rx,rx*2,rx*2);ctx.restore();
     }
   }else{
-    const snow=type==='snow',n=Math.min(160,Math.max(58,Math.round(w/6)));
-    for(let i=0;i<n;i++){
-      const seed=((i*67+13)%101)/101,depth=.45+seed*.75;
-      const y=(i*79.37+seconds*(snow?34:270)*depth)%(h+22)-11;
-      let x=i*113.19+(snow?Math.sin(seconds*.68+i)*12+seconds*9:seconds*62)*depth;
-      x=(x%(w+24))-12;
-      ctx.beginPath();
-      if(snow){
-        ctx.fillStyle=i%3?'#fffdf4da':'#dae8ebbb';ctx.arc(x,y,.85+depth*1.45,0,2*Math.PI);ctx.fill();
-      }else{
-        ctx.lineWidth=.75+depth*.55;ctx.strokeStyle=i%3?'#e0edf4ad':'#a7c2cfab';
-        ctx.moveTo(x,y);ctx.lineTo(x+2.2*depth,y+12*depth);ctx.stroke();
-      }
-    }
+    drawStudioPrecipitation(ctx,type,w,h,seconds,opacity);
   }
   }
   ctx.globalAlpha=1;

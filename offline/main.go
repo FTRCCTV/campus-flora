@@ -23,7 +23,7 @@ import (
 var page []byte
 
 const service = "https://cau-campus-flora-notebook.bubblybox131.chatgpt.site"
-const appVersion = "campus-flora-local/0.9.0"
+const appVersion = "campus-flora-local/0.10.0"
 
 func problem(w http.ResponseWriter, status int, message string) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")

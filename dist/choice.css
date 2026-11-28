@@ -20,7 +20,7 @@ button.flora-choice:disabled{opacity:.65;cursor:default}
 button.flora-choice[hidden]{display:none!important}
 .benchHeading .flora-choice{display:flex;max-width:min(47vw,215px)}
 .duelDesk .flora-choice,.body label .flora-choice,.authForm .flora-choice{display:flex;width:100%;margin-top:4px}
-.studioBar .flora-choice,.gardenCare>label .flora-choice,.benchSwatches .flora-choice{display:flex}
+.studioBar .flora-choice,.gardenCare header label .flora-choice,.benchSwatches .flora-choice{display:flex}
 .duelMobileHand .flora-choice{max-width:71%}
 .flora-choice-list{
   position:fixed;inset:auto;z-index:2147483646;box-sizing:border-box;

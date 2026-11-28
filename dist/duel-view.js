@@ -1,12 +1,16 @@
 const duelViewState={angle:.25,flat:false,cell:-1,board:null,pick:null,legal:null,play:false,raf:0,flightStart:0,pointer:null};
 function paintDuelView(){
-  const v=duelViewState;if(v.raf)return;
+  const v=duelViewState;
+  clearTimeout(v.timer);
+  if(v.raf)return;
   v.raf=requestAnimationFrame(now=>{
     v.raf=0;
-    const canvas=$('duelCanvas');if(v.flat||$('duel').hidden||!canvas.clientWidth)return;
-    const flight=v.flightStart?Math.min(1,(now-v.flightStart)/520):1;
-    v.pick=drawDuelTable(canvas,{board:v.board,angle:v.angle,highlight:v.cell,legal:v.legal,flight});
-    if(flight<1)paintDuelView();
+    const canvas=$('duelCanvas');
+    if(v.flat||$('duel').hidden||document.hidden||v.visible===false||!canvas.clientWidth)return;
+    const still=matchMedia('(prefers-reduced-motion:reduce)').matches;
+    const flight=still||!v.flightStart?1:Math.min(1,(now-v.flightStart)/800);
+    v.pick=drawDuelTable(canvas,{board:v.board,angle:v.angle,highlight:v.cell,legal:v.legal,flight,phase:still?0:now/1000});
+    if(!still&&v.board&&(flight<1||v.board.winner===null))v.timer=setTimeout(paintDuelView,flight<1?16:84);
   });
 }
 function updateDuelView(board,room,canPlay,card,cards,glide){
@@ -44,6 +48,8 @@ function updateDuelView(board,room,canPlay,card,cards,glide){
 }
 function initDuelView(){
   const v=duelViewState,canvas=$('duelCanvas');
+  if('IntersectionObserver' in window)new IntersectionObserver(([entry])=>{v.visible=entry.isIntersecting;if(v.visible)paintDuelView()}).observe(canvas);
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)paintDuelView()});
   $('duelRoomOptions').onclick=()=>{v.roomOptions=!v.roomOptions;renderDuel()};
   $('duelHandMobile').onchange=e=>{$('duelHand').value=e.target.value;$('duelHand').dispatchEvent(new Event('change'))};
   function hit(e){const r=canvas.getBoundingClientRect();return v.pick?.hit(e.clientX-r.left,e.clientY-r.top)??-1}

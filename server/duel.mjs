@@ -86,6 +86,11 @@ export async function duelApi(request,env){
     if(!edge)return authJson({error:'需要双方先成为花友。'},403);
     const path='duel/rooms/v1/'+encodeURIComponent(id)+'.json',doc=await env.BUCKET.get(path);
     let room=doc?await doc.json():null;
+    if(room?.board&&!Array.isArray(room.board.forecast)){
+      let seed=2166136261;
+      for(const ch of room.match+':'+room.rev)seed=Math.imul(seed^ch.charCodeAt(0),16777619);
+      ButterflyDuel.planFlight(room.board,()=>((seed=(Math.imul(seed,1664525)+1013904223)>>>0)/4294967296));
+    }
     if(request.method==='GET')return authJson({room:duelView(room,user)});
     if(request.method!=='POST'||request.headers.get('Origin')!==url.origin)return authJson({error:'请求不符。'},403);
     const data=await request.json().catch(()=>null);
@@ -99,7 +104,7 @@ export async function duelApi(request,env){
       room.status='playing';
     }else if(room&&data.action==='end'&&room.status!=='done'){
       if(room.status==='playing')room.board.winner=1-room.players.indexOf(user.id);
-      room.status='done';room.board.last=['对局已结束。'];
+      room.status='done';room.board.forecast=[];room.board.plan=[];room.board.last=['对局已结束。'];
     }else if(room?.status==='playing'&&data.action==='play'&&room.players[room.board.turn]===user.id){
       try{
         if(data.key!==null&&(typeof data.key!=='string'||!data.key||data.key.length>160))throw Error('植物无效。');

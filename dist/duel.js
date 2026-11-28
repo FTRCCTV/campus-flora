@@ -105,6 +105,7 @@ function openDuel(){
     leaveDuel();deckSetup.picks=[{},{},{}];deckSetup.seat=0;duelState.scope=duelOwner();duelState.room=null;duelState.friend='';duelState.mode='local';duelMsg('');
     try{duelState.local=JSON.parse(sessionStorage.getItem(duelStorage()))}catch{duelState.local=null}
     if(!duelState.local)duelState.local=ButterflyDuel.create();
+    if(!Array.isArray(duelState.local.forecast)){ButterflyDuel.planFlight(duelState.local);storePractice()}
   }
   if(!$('duelBoard').childElementCount)initDuel();
   void classifyDiscoveries((gardenAccount.user?gardenAccount.design:readDesign())?.discovered||[]);
@@ -138,19 +139,26 @@ function renderDuel(){
   const grid=$('duelBoard'),prior=Number(grid.dataset.pos),scope=online?room?.match:'practice';
   const glide=grid.dataset.scope===scope&&s?.trail.at(-2)===prior&&prior!==s?.pos;
   grid.dataset.scope=scope||'';grid.dataset.pos=String(s?.pos??0);
+  const forecast=s?.forecast||[],path=s?[s.pos,...forecast]:[];
+  const headline=!s?'':s.winner!==null?'蝴蝶已抵达得分边':s.wandering?'受阻游走 · 预计下一步':'预计航线';
+  const summary=headline+(forecast.length?'　'+path.map(ButterflyDuel.coord).join(' → '):'');
+  const caption=$('duelForecast');if(caption.textContent!==summary)caption.textContent=summary;
   for(const [i,b] of Array.from(grid.children).entries()){
     const tile=s?.cells[i],butterfly=i===(s?.pos??0),trail=s?.trail.includes(i);
     b.dataset.owner=tile?.owner??'';b.dataset.butterfly=butterfly;
-    const token=butterfly?'🦋':tile?duelGlyph[tile.type]:trail?'·':'';
+    const step=forecast.indexOf(i),delta=step<0?0:i-path[step];
+    b.dataset.forecast=String(step>=0);
+    const token=butterfly?'🦋':tile?duelGlyph[tile.type]:step>=0?({'1':'→','5':'↓','-1':'←','-5':'↑'})[delta]:trail?'·':'';
     b.firstChild.textContent=ButterflyDuel.coord(i);b.lastChild.textContent=token;
     b.lastChild.className=!tile&&!butterfly?'footprint':'';
-    b.title=ButterflyDuel.coord(i)+(tile?' · '+(tile.owner+1)+'P '+tile.name:'')+(butterfly?' · 蝴蝶':'');
+    b.title=ButterflyDuel.coord(i)+(tile?' · '+(tile.owner+1)+'P '+tile.name:'')+(butterfly?' · 蝴蝶':'')+(step>=0?' · 预计航线第 '+(step+1)+' 步':'');
     b.setAttribute('aria-label',b.title);b.disabled=!play;
   }
   updateDuelView(s,room,play,card,cards,glide);
-  if(glide&&!matchMedia('(prefers-reduced-motion:reduce)').matches){
+  if(glide&&duelViewState.flat&&!matchMedia('(prefers-reduced-motion:reduce)').matches){
     const from=grid.children[prior].getBoundingClientRect(),to=grid.children[s.pos].getBoundingClientRect();
-    grid.children[s.pos].lastChild.animate([{transform:'translate('+(from.x-to.x)+'px,'+(from.y-to.y)+'px)'},{transform:'translate(0,0)'}],{duration:450,easing:'ease-out'});
+    const dx=from.x-to.x,dy=from.y-to.y;
+    grid.children[s.pos].lastChild.animate([{transform:`translate(${dx}px,${dy}px)`},{offset:.48,transform:`translate(${dx*.5}px,${dy*.5-11}px) rotate(-9deg)`},{transform:'translate(0,0)'}],{duration:760,easing:'ease-in-out'});
   }
 }
 function storePractice(){

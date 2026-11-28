@@ -15,6 +15,20 @@ test('every unobstructed flight is shortest and stops on first scoring edge',()=
     assert.throws(()=>game.play(s,null));
   }
 });
+test('published route is stable until affected, includes the winning edge and matches each flight',()=>{
+  const s=game.create(()=>0);assert.deepEqual(s.forecast,[1,2,3,4]);
+  game.play(s,game.basic,1,()=>.9);
+  assert.equal(s.forecast[0],5);assert.ok(!s.forecast.includes(1));
+  const initial=[...s.forecast];game.play(s,null,null,()=>0);
+  assert.equal(s.pos,initial[0]);assert.deepEqual(s.forecast,initial.slice(1));
+  while(s.winner===null){
+    const route=[...s.forecast];game.play(s,null,null,()=>0);assert.deepEqual(s.forecast,route);
+    game.play(s,null,null,()=>.99);assert.equal(s.pos,route[0]);assert.deepEqual(s.forecast,route.slice(1));
+  }
+  const t=game.create(()=>0);game.play(t,game.basic,24,()=>0);
+  assert.equal(t.wandering,true);assert.deepEqual(t.forecast,[1]);
+  game.play(t,null,null,()=>.999);assert.equal(t.pos,1);assert.equal(t.forecast.length,1);
+});
 test('shortest detour, random walking, fully trapped flutter and reopening a route',()=>{
   const s=game.create();s.pos=12;s.cells[13]=wall;s.cells[17]=wall;
   const before=game.paths(s).dist[s.pos];game.fly(s,()=>0);
@@ -75,15 +89,21 @@ test('two authenticated friends invite, join, reconnect, use collected cards, an
   const act=(i,action,extra={})=>call(i,{action,rev:room.rev,match:room.match,...extra});
   assert.equal((await act(0,'join')).status,409);room=(await act(1,'join')).room;
   assert.equal(room.deck.find(c=>c.type==='wind').key,'standard-wind');
+  const roomKey='duel/rooms/v1/test.json',legacy=await (await db.get(roomKey)).json();
+  delete legacy.board.forecast;legacy.board.plan=[];
+  await db.put(roomKey,JSON.stringify(legacy));
+  const restored=(await call(0)).room.board.forecast;
+  assert.ok(restored.length>=4);assert.deepEqual((await call(1)).room.board.forecast,restored);
   assert.equal((await act(0,'play',{key:'standard-wind',cell:1})).status,400);
   assert.equal((await act(1,'play',{key:null})).status,409);
   assert.equal((await act(0,'play',{key:'fake plant',cell:1})).status,400);
   const prev=room.rev;room=(await act(0,'play',{key:'acer palmatum',cell:1,type:'breaker'})).room;
   assert.equal(room.board.cells[1].type,'wind');
+  const announced=room.board.forecast[0];
   assert.equal((await act(1,'play',{rev:prev,key:null})).status,409);
   assert.equal((await act(1,'play',{key:'trial',cell:1})).status,400);
   room=(await act(1,'play',{key:null})).room;
-  assert.equal(room.board.round,2);assert.equal(room.board.plan,undefined);
+  assert.equal(room.board.pos,announced);assert.equal(room.board.round,2);assert.equal(room.board.plan,undefined);
   assert.equal((await call(0)).room.rev,room.rev);
   room=(await act(1,'end')).room;assert.equal(room.board.winner,0);
 });

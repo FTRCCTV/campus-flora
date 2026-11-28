@@ -293,6 +293,30 @@ body[data-atmosphere="meteors"] .pageAtmosphere:before{inset:5% auto auto 91%;wi
 .benchTools{border:1px solid #d6cdb6;border-top:0;padding:4px 8px;margin-bottom:12px}.benchTools small,.duelViewBar small{color:#57634f;font-size:12px}.benchTools button,.duelViewBar button{border:1px solid #c7c4ad;color:#385344;background:#fcfaee;border-radius:5px;padding:5px 9px;cursor:pointer}.benchTools button+button{margin-left:3px}
 .benchCaption i{font-size:13px;color:#66684e}.observationBench #heroNote{max-width:none;font-size:13px}.observationBench progress{width:100%;height:7px;accent-color:#4e7655}#benchStyle,.gardenCare{border-top:1px solid #cbbfa6;margin-top:13px;padding-top:10px}#benchStyle summary,.gardenCare summary{font-weight:650;cursor:pointer}.benchSwatches{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}.benchSwatches label,.gardenCare label{font-size:13px}.benchSwatches select,.gardenCare>label select{display:block}.observationBench details p,#benchStatus{font-size:13px}#benchStatus{margin-left:8px}
 #atlas [aria-pressed=true]{outline:2px solid #628065;outline-offset:-2px}.gardenCare{background:#f4f1e4;border:1px solid #ccc6ad;border-radius:7px;padding:12px 16px}.gardenCare small{font-weight:400;color:#67705b}.gardenCare>label{display:block;margin:10px 0}.compactCare{margin:0;padding:0;border:0;background:transparent}
+#gardenCare{margin:12px 0;background:#f5f3e7}
+#gardenCare header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+#gardenCare header h3{margin:0;color:#2c5242;font-size:1.04rem}
+#gardenCare header label{display:flex;align-items:center;gap:8px}
+#gardenCare header label[hidden]{display:none}
+#gardenCare .compactCare{display:grid;grid-template-columns:1fr auto;align-items:center;gap:5px 14px;margin-top:8px}
+#gardenCare .nurseryHeading{display:block}#gardenCare .nurseryHeading h3{font-size:.94rem;margin:0}
+#gardenCare .careActions{align-items:center}#gardenCare .careAction{min-height:40px}
+#gardenCare .careStatus,#gardenCare details{grid-column:1/-1;margin:0}
+#gardenCare .careStatus:empty{display:none}
+#gardenCare details summary{font-size:.83rem;color:#45634c;padding:4px 0}
+.careEmpty{color:#526354;font-size:.88rem;margin:8px 0 0}
+.flightCaption{font-size:clamp(.76rem,2vw,.92rem);font-weight:650;letter-spacing:.02em;line-height:1.5;padding:8px 12px;color:#315440;background:#edf2df;margin:6px 0;border-radius:6px;font-variant-numeric:tabular-nums}.flightCaption:empty{display:none}
+#duelBoard button[data-forecast="true"]{box-shadow:inset 0 0 0 2px #739669;background:#edf2dd}
+#duelBoard button[data-forecast="true"] .footprint{color:#28694c;font-size:1.1rem;opacity:1}
+@media(max-width:640px){#gardenCare .compactCare{grid-template-columns:1fr}#gardenCare header label{max-width:100%}#gardenCare .careActions{gap:6px}}
+@media(prefers-reduced-motion:no-preference){
+  @keyframes floraPageIn{from{opacity:.4;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+  @keyframes floraMenuIn{from{opacity:.3;transform:translateY(-3px)}to{opacity:1;transform:translateY(0)}}
+  main.shell>section:not([hidden]),dialog[open]:not(#bookIntro){animation:floraPageIn .24s ease-out}
+  .flora-choice-list{animation:floraMenuIn .14s ease-out}
+  .careAction,.duelQuickCards button{transition:background-color .18s,box-shadow .18s,transform .15s}
+  .careAction:active:not(:disabled),.duelQuickCards button:active{transform:translateY(2px)}
+}
 .duelLayout{align-items:start;grid-template-columns:minmax(0,1.6fr) minmax(230px,.8fr);gap:clamp(12px,2vw,25px)}.duelMobileHand{display:none}@media(max-width:750px){.duelMobileHand{display:flex;align-items:center;gap:12px;padding:6px 12px;font-size:12px}.duelMobileHand select{max-width:70%}}.duelArena{min-width:0;border:1px solid #c8b994;background:#f3edda;border-radius:12px;overflow:hidden;box-shadow:0 6px 18px #6c5e3e14}
 .duelScore{padding:10px 12px;border-bottom:1px solid #c9c1a8;background:#f9f4e6}.duelScore [data-seat]{font-size:12px;color:#fff;border-radius:20px;padding:5px 10px;background:#44786a}.duelScore [data-seat="1"]{background:#9b6248}.duelScore [data-seat].active{outline:2px solid #9d8751;outline-offset:2px}.duelScore #duelRibbon{display:block;color:#374c3d;font-size:clamp(13px,1.65vw,18px);text-align:center}
 #duelCanvas{display:block;width:100%;height:auto;aspect-ratio:1.36;touch-action:pan-y;cursor:crosshair}#duelCanvas[hidden],#duelPlane[hidden]{display:none}.duelViewBar{padding:7px 12px;border-top:1px solid #c9c1a8}.duelViewBar small{margin-right:auto}.duelField{max-width:100%;margin:0}
