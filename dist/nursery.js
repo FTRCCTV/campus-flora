@@ -41,9 +41,16 @@ function operateCareTool(plant,kind){
     let x=.13,y=.25,held=false,frame=0,last=0,amount=0;
     function position(){hand.style.left=x*100+'%';hand.style.top=y*100+'%'}
     function drag(e){const r=surface.getBoundingClientRect();x=Math.max(.06,Math.min(.94,(e.clientX-r.left)/r.width));y=Math.max(.06,Math.min(.93,(e.clientY-r.top)/r.height));position()}
-    hand.onpointerdown=e=>{if(e.button!==0)return;hand.setPointerCapture(e.pointerId);held=true;drag(e)};
-    hand.onpointermove=e=>{if(held&&hand.hasPointerCapture(e.pointerId))drag(e)};
-    hand.onlostpointercapture=hand.onpointercancel=hand.onpointerup=()=>{held=false};
+    hand.onpointerdown=e=>{if(e.button!==0)return;e.preventDefault();hand.setPointerCapture(e.pointerId);held=true;drag(e)};
+    let dragId=null;
+    const move=e=>{if(held&&e.pointerId===dragId)drag(e)};
+    const stop=e=>{if(e.pointerId===dragId){held=false;dragId=null}};
+    hand.addEventListener('pointerdown',e=>{if(e.button===0)dragId=e.pointerId});
+    dialog.addEventListener('pointermove',move,true);
+    dialog.addEventListener('pointerup',stop,true);
+    dialog.addEventListener('pointercancel',stop,true);
+    hand.onpointercancel=hand.onpointerup=()=>{held=false};
+    hand.onlostpointercapture=e=>{if(e.target===hand&&!hand.hasPointerCapture(e.pointerId))held=false};
     hand.onkeydown=e=>{if(e.code==='Space'){e.preventDefault();held=true;x=.47;y=.27;position()}};
     hand.onkeyup=e=>{if(e.code==='Space'){e.preventDefault();held=false}};
     hand.onblur=()=>{held=false};
