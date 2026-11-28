@@ -19,12 +19,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: 检出源码
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           persist-credentials: false
 
       - name: 安装 Node.js 24
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: '24'
           cache: npm
@@ -52,8 +52,10 @@ jobs:
 
       # tests/nursery.test.mjs 直接 import dist/server/index.js，
       # 所以这一步必须排在构建之后，否则会因产物不存在而失败。
+      # Node 24 把位置参数当 glob 用，目录形式（node --test tests/）会报
+      # "Cannot find module .../tests"，所以这里显式给 glob。
       - name: 回归测试
-        run: node --test tests/
+        run: npm test
 
       - name: 构建离线单文件版
         run: node build.mjs campus-flora-offline.html

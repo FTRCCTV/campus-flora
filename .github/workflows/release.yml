@@ -23,12 +23,12 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: 检出源码
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0 # generate_release_notes 需要完整提交历史
 
       - name: 安装 Node.js 24
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: '24'
           cache: npm
