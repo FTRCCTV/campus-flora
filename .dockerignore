@@ -1,0 +1,27 @@
+# 只在构建镜像时排除，不影响仓库本身
+.git
+.gitignore
+.github
+.openai
+
+# 依赖与本地数据
+node_modules
+flora-data
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+
+# 与运行时无关的产物/素材
+netlify
+netlify-public
+offline
+tests
+campus-flora-offline.html
+docs
+
+# 本地环境与日志
+.env
+.env.*
+!.env.example
+*.log
+*.patch

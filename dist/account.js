@@ -21,6 +21,7 @@ async function refreshAccount({silent=false}={}){
     Object.assign(gardenAccount,{mode:data.user?'member':'guest',user:data.user||null,records:data.records||[],design:data.design||GardenLayout.empty(),version:data.version||'new'});
     if(changed&&modal.open)modal.close();
     setAccountButton();route();clearTimeout(refreshAccount.retryTimer);
+    if(pendingGarden()&&!saveBusy)void flushPendingGarden();
   }catch{
     if(epoch!==sessionEpoch)return;
     gardenAccount.mode=gardenAccount.user?'failed':'guest';
@@ -29,24 +30,73 @@ async function refreshAccount({silent=false}={}){
     clearTimeout(refreshAccount.retryTimer);refreshAccount.retryTimer=setTimeout(()=>{if(!saveBusy)refreshAccount({silent:true})},15000);
   }
 }
+const pendingKey=owner=>'cau.flora.pending.v1.'+owner;
+function pendingGarden(){
+  if(!gardenAccount.user)return null;
+  try{const raw=localStorage.getItem(pendingKey(gardenAccount.user.id));return raw?JSON.parse(raw):null}catch{return null}
+}
+function storePendingGarden(state){
+  if(!gardenAccount.user)return false;
+  try{localStorage.setItem(pendingKey(gardenAccount.user.id),JSON.stringify(state));return true}catch{return false}
+}
+function clearPendingGarden(){
+  if(!gardenAccount.user)return;
+  try{localStorage.removeItem(pendingKey(gardenAccount.user.id))}catch{}
+}
+let flushTimer=0;
+function scheduleFlush(delay=20000){clearTimeout(flushTimer);flushTimer=setTimeout(()=>{void flushPendingGarden()},delay)}
+// 离线修改重放：先取服务端最新版本，再只发差异（upters/removes），避免整份花园重传。
+async function flushPendingGarden(){
+  const pending=pendingGarden();
+  if(!pending||saveBusy||!gardenAccount.user||gardenAccount.mode!=='member')return false;
+  saveBusy=true;
+  try{
+    const res=await fetch('/api/account',{credentials:'same-origin',cache:'no-store',signal:AbortSignal.timeout(15000)});
+    const data=await res.json();
+    if(!res.ok||!data.user||data.user.id!==gardenAccount.user.id)throw Error();
+    const {upserts,removes}=GardenLayout.patchOps(data.records||[],pending.records);
+    const response=await fetch('/api/account',{
+      method:'PUT',credentials:'same-origin',cache:'no-store',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({owner:gardenAccount.user.id,version:data.version,patch:{upserts,removes,order:pending.records.map(r=>r.uid),design:pending.design}}),
+      signal:AbortSignal.timeout(30000)
+    });
+    const saved=await response.json();
+    if(!response.ok)throw Error(saved.error||'');
+    clearPendingGarden();
+    gardenAccount.version=saved.version||data.version;
+    gardenAccount.records=pending.records;gardenAccount.design=pending.design;
+    setAccountButton();route();toast('离线期间的修改已同步到账号花园。');
+    return true;
+  }catch{scheduleFlush(30000);return false}
+  finally{saveBusy=false}
+}
 async function saveMemberGarden(update){
   if(saveBusy)throw Error('上一次修改正在同步，请稍后重试。');
   saveBusy=true;++sessionEpoch;
-  let reload=false;
+  let reload=false,list,design;
   try{
-    const list=gardenAccount.records.map(r=>structuredClone(GardenLayout.located(r))),design=structuredClone(gardenAccount.design);update(list,design);
+    list=gardenAccount.records.map(r=>structuredClone(GardenLayout.located(r)));design=structuredClone(gardenAccount.design);update(list,design);
     if(!GardenLayout.valid(list,design))throw Error('物品重叠或位置无效。');
+    const {upserts,removes}=GardenLayout.patchOps(gardenAccount.records,list);
     const response=await fetch('/api/account',{
       method:'PUT',credentials:'same-origin',cache:'no-store',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({owner:gardenAccount.user.id,version:gardenAccount.version,records:list,design}),signal:AbortSignal.timeout(30000)
+      body:JSON.stringify({owner:gardenAccount.user.id,version:gardenAccount.version,patch:{upserts,removes,order:list.map(r=>r.uid),design}}),
+      signal:AbortSignal.timeout(30000)
     });
     const data=await response.json();
     if(!response.ok){reload=response.status===409||response.status===401;throw Error(data.error||'同步失败，修改未保存。')}
     design.seeds=data.seeds??GardenLayout.seedCatalogue(list,design.seeds);
     design.discovered=data.discovered??GardenLayout.discoveries(list,design.discovered);
     gardenAccount.version=data.version;gardenAccount.records=list;gardenAccount.design=design;
+    if(pendingGarden())clearPendingGarden();
   }catch(error){
-    if(error instanceof TypeError||error.name==='TimeoutError'){reload=true;throw Error('连接中断，请刷新花园确认保存状态。')}
+    if(error instanceof TypeError||error.name==='TimeoutError'||error.name==='AbortError'){
+      if(list&&design&&storePendingGarden({records:list,design,at:Date.now()})){
+        scheduleFlush(20000);
+        throw Error('网络中断，这次修改已暂存本机，恢复网络后会自动同步。');
+      }
+      reload=true;throw Error('连接中断，请刷新花园确认保存状态。');
+    }
     throw error;
   }finally{saveBusy=false;if(reload)await refreshAccount()}
 }
@@ -150,3 +200,6 @@ function accountPanel(){
 accountButton.onclick=accountPanel;
 window.addEventListener('pageshow',e=>{if(e.persisted)refreshAccount({silent:true})});
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!document.getElementById('modal').open)refreshAccount({silent:true})});
+window.addEventListener('online',()=>{void flushPendingGarden()});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&pendingGarden())void flushPendingGarden()});
+if(pendingGarden())scheduleFlush(4000);

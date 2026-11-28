@@ -277,6 +277,18 @@ const GardenLayout=(()=>{
     }
     return true;
   }
-  return {carePlan,tend,seedKey,seedCatalogue,rewards,effects,discoveries,unlocked,zones,scenes,weather,props,propRadii,empty,unpack,radius,located,blocker,clear,place,valid,setSpecimenMesh};
+  // Records that differ between two garden snapshots, so a save can send only
+  // what changed instead of re-uploading inline photos on every edit.
+  function patchOps(previous,next){
+    const before=new Map((Array.isArray(previous)?previous:[]).map(p=>[p.uid,JSON.stringify(p)]));
+    const upserts=[],seen=new Set();
+    for(const p of Array.isArray(next)?next:[]){
+      if(!p||typeof p.uid!=='string')continue;
+      seen.add(p.uid);
+      if(before.get(p.uid)!==JSON.stringify(p))upserts.push(p);
+    }
+    return {upserts,removes:[...before.keys()].filter(uid=>!seen.has(uid))};
+  }
+  return {carePlan,tend,seedKey,seedCatalogue,rewards,effects,discoveries,unlocked,zones,scenes,weather,props,propRadii,empty,unpack,radius,located,blocker,clear,place,valid,setSpecimenMesh,patchOps};
 })();
 globalThis.GardenLayout=GardenLayout;

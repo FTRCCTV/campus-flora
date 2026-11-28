@@ -13,6 +13,8 @@ function checkGarden(items){
     for(const field of ['location','family','note']){
       if(p[field]!=null&&(typeof p[field]!=='string'||p[field].length>2000))return false;
     }
+    if(p.spot!=null&&(typeof p.spot!=='string'||p.spot.length>40||(p.spot&&!/^[a-z0-9-]+$/.test(p.spot))))return false;
+    if(p.spotName!=null&&(typeof p.spotName!=='string'||p.spotName.length>40))return false;
     if(p.growth!==undefined&&(!Number.isInteger(p.growth)||p.growth<0||p.growth>4))return false;
     if(p.careCount!==undefined&&(!Number.isInteger(p.careCount)||p.careCount<0||p.careCount>1000000))return false;
     if(p.care!==undefined){
@@ -65,7 +67,32 @@ export async function accountGarden(request,env){
     if(buffer.byteLength>maxBytes)return send({error:'花园已超过同步容量。'},413);
     let data;try{data=JSON.parse(new TextDecoder().decode(buffer))}catch{return send({error:'数据格式有误。'},400)}
     if(data?.owner!==user.id)return send({error:'账号已切换，请刷新后重试。'},409);
-    if(!checkGarden(data.records)||typeof data.version!=='string'||!(/^(new|"[a-f0-9]{32}")$/i.test(data.version)))return send({error:'花园数据或版本无效。'},400);
+    if(typeof data.version!=='string'||!(/^(new|"[a-f0-9]{32}")$/i.test(data.version)))return send({error:'花园数据或版本无效。'},400);
+    // Incremental save: the editor sends only the records it touched, so a phone
+    // does not re-upload every inline photo just to move one pot.
+    if(data.patch){
+      const patch=data.patch;
+      if(!patch||typeof patch!=='object'||!Array.isArray(patch.upserts)||patch.upserts.length>800||
+         !Array.isArray(patch.removes)||patch.removes.length>800||patch.removes.some(uid=>typeof uid!=='string'||!uid||uid.length>400)||
+         (patch.order!==undefined&&(!Array.isArray(patch.order)||patch.order.length>800||patch.order.some(uid=>typeof uid!=='string'))))
+        return send({error:'增量数据无效。'},400);
+      const current=await env.BUCKET.get(objectKey);
+      if((current?.httpEtag||'new')!==data.version)return send({error:'花园已有更新，请刷新后重试。'},409);
+      const existing=current?GardenLayout.unpack(await current.json()):GardenLayout.empty();
+      const merged=new Map(existing.records.map(p=>[p.uid,p]));
+      for(const uid of patch.removes)merged.delete(uid);
+      for(const p of patch.upserts){
+        if(!p||typeof p.uid!=='string')return send({error:'增量数据无效。'},400);
+        merged.set(p.uid,p);
+      }
+      const ordered=Array.isArray(patch.order)?patch.order.filter(uid=>merged.has(uid)):[];
+      const seen=new Set(ordered);
+      data.records=[...ordered.map(uid=>merged.get(uid)),...[...merged.entries()].filter(([uid])=>!seen.has(uid)).map(([,p])=>p)];
+      // A record-only patch keeps the current layout; the editor only sends design
+      // when the layout itself changed.
+      data.design=patch.design!==undefined?patch.design:existing.design;
+    }
+    if(!checkGarden(data.records))return send({error:'花园数据或版本无效。'},400);
     let design=data.design;
     if(design===undefined){
       const old=await env.BUCKET.get(objectKey);

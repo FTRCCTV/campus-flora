@@ -94,10 +94,15 @@ function route(){
 }
 window.addEventListener('storage',e=>{if(e.key===gardenKey||e.key===null)route()});
 function detail(r){
-  show('<img class="detailArt" alt="观察记录"><div class="body"><div class="eyebrow">'+(r.seedFrom?'花友种子':r.gift?'花友分株':r.generation>1?'自留种子':r.demo?'图鉴示例':'校园观察')+'</div><h2>'+esc(r.name)+'</h2><i>'+esc(r.latin)+'</i><p>'+esc(r.family||'')+'</p><h3>植物小科普</h3><p id="detailFact">'+esc(plantFact(r))+'</p><div class="traitChips" id="detailTraits">'+traitChips(r)+'</div><div class="recinfo">'+esc(r.date)+' · '+esc(r.location||'未填写发现地点')+'</div><p>'+esc(placementName(r))+' · '+sizes[r.size]+' · '+habits[r.form]+'</p><div id="carePanel"></div><div class="management"><button id="move">调整体型与位置</button><button id="replace">替换植物</button><button class="danger" id="remove">移除</button></div><p class="modelnote" id="modelStatus"></p></div>');
+  show('<img class="detailArt" alt="观察记录"><div class="body"><div class="eyebrow">'+(r.seedFrom?'花友种子':r.gift?'花友分株':r.generation>1?'自留种子':r.demo?'图鉴示例':'校园观察')+'</div><h2>'+esc(r.name)+'</h2><i>'+esc(r.latin)+'</i><p>'+esc(r.family||'')+'</p><h3>植物小科普</h3><p id="detailFact">'+esc(plantFact(r))+'</p><div class="traitChips" id="detailTraits">'+traitChips(r)+'</div><div class="recinfo">'+esc(r.date)+' · '+esc(r.spotName||r.location||'未填写发现地点')+'</div><p>'+esc(placementName(r))+' · '+sizes[r.size]+' · '+habits[r.form]+'</p><div id="carePanel"></div><div class="management"><button id="move">调整体型与位置</button><button id="replace">替换植物</button><button class="light" id="card">生成植物名片</button>'+(typeof visitingGarden!=='undefined'&&visitingGarden?'<button class="light" id="guestbook">花园留言</button>':'')+'<button class="danger" id="remove">移除</button></div><p class="modelnote" id="modelStatus"></p></div>');
   body.querySelector('img').src=r.photo;renderPlantCare(r);showDuelTrait(r);
   $('move').onclick=()=>plantEditor([r],r.photo,r.demo,{editUid:r.uid,previous:r});
   $('replace').onclick=()=>library({replaceUid:r.uid,previous:r,zone:r.zone});
+  if($('card'))$('card').onclick=()=>{if(typeof openPlantCard==='function')openPlantCard(r);else toast('名片功能暂未加载。')};
+  if($('guestbook'))$('guestbook').onclick=()=>{
+    if(typeof openGardenGuestbook==='function'&&visitingGarden)openGardenGuestbook(visitingGarden.id,visitingGarden.name);
+    else toast('留言功能暂未加载。');
+  };
   $('remove').onclick=()=>{
     show('<div class="body"><h2>移除'+esc(r.name)+'？</h2><p>将删除这条观察记录和照片，并腾出'+esc(placementName(r))+'。</p><div class="management"><button id="cancel">保留植物</button><button class="danger" id="confirmRemove">确认移除</button></div><p role="status" id="feedback"></p></div>');
     $('cancel').onclick=()=>detail(r);$('confirmRemove').onclick=async()=>{
@@ -161,11 +166,21 @@ function plantFact(plant){
 }
 function plantEditor(options,photo,demo,context={}){
   const prev=context.previous,editing=!!context.editUid,replacing=!!context.replaceUid;
-  show('<div class="body"><div class="eyebrow">PLANTING DESK</div><h2>'+(editing?'调整植株':replacing?'确认替换':'种植工作台')+'</h2><div class="pot-choice"><canvas id="previewPlant"></canvas><div><label>植物名称<select id="species"></select></label><i id="taxonomy"></i></div></div><section class="plantFact"><strong>植物小科普</strong><p id="speciesFact"></p><div class="traitChips" id="speciesTraits"></div><p id="profileProgress" role="status" hidden></p></section><label>展示大小<select id="size"></select></label><label>种植区域<select id="bed"></select></label><label>发现地点（选填）<input id="place" maxlength="60"></label><p id="discoveryHint" class="discoveryHint" role="status"></p><p id="actionNote"></p><button class="primary" id="save">确定</button><p id="feedback" class="error" role="status"></p></div>');
+  show('<div class="body"><div class="eyebrow">PLANTING DESK</div><h2>'+(editing?'调整植株':replacing?'确认替换':'种植工作台')+'</h2><div class="pot-choice"><canvas id="previewPlant"></canvas><div><label>植物名称<select id="species"></select></label><i id="taxonomy"></i></div></div><section class="plantFact"><strong>植物小科普</strong><p id="speciesFact"></p><div class="traitChips" id="speciesTraits"></div><p id="profileProgress" role="status" hidden></p></section><label>展示大小<select id="size"></select></label><label>种植区域<select id="bed"></select></label><label>发现地点（选填）<input id="place" maxlength="60"></label><label>校园点位<select id="spot"></select></label><p id="discoveryHint" class="discoveryHint" role="status"></p><p id="actionNote"></p><button class="primary" id="save">确定</button><p id="feedback" class="error" role="status"></p></div>');
   options.forEach((r,i)=>$('species').add(new Option(r.name+(Number.isFinite(r.score)?' · '+(100*r.score).toFixed(1)+'%':''),i)));
   fillSelect('size',sizes,prev?.size,'请选择体型');
   fillSelect('bed',Object.fromEntries(Object.entries(places).map(([k,v])=>[k,v.name])),context.zone||prev?.zone||zone,'请选择区域');
   $('place').value=editing?prev.location||'':'';
+  if($('spot')){
+    $('spot').add(new Option('不指定点位',''));
+    for(const spot of CampusSpots.points)$('spot').add(new Option(spot.name+' · '+spot.note,spot.id));
+    $('spot').value=editing?prev.spot||'':'';
+    $('spot').onchange=()=>{const spot=CampusSpots.byId.get($('spot').value);if(spot)$('place').value=spot.name};
+    $('place').addEventListener('input',()=>{
+      const spot=CampusSpots.byId.get($('spot').value);
+      if(spot&&$('place').value.trim()!==spot.name)$('spot').value='';
+    });
+  }
   if(!demo){const img=document.createElement('img');img.src=photo;img.alt=editing&&prev.gift?'分株模型肖像':'本次观察的原始照片';img.className='observation-photo';body.querySelector('.pot-choice').before(img)}
   const originalUid=context.editUid||context.replaceUid;
   let palette=editing?prev.palette:undefined;
@@ -222,13 +237,13 @@ function plantEditor(options,photo,demo,context={}){
   $('save').onclick=async()=>{
     const p=options[Number($('species').value)],form=plantProfile({...p,model:cachedModel(p.latin)||p.model}).form,size=$('size').value,selected=$('bed').value;
     if(!size||!selected){$('feedback').textContent='请选择展示大小和区域。';return}
-    const plantedId=editing?originalUid:newUid(),locationText=$('place').value.trim(),button=$('save');button.disabled=true;
+    const plantedId=editing?originalUid:newUid(),locationText=$('place').value.trim(),spotId=$('spot')?$('spot').value:'',button=$('save');button.disabled=true;
     try{
       const photoPalette=await colorsFor(form);
       changeStudioDraft((list,design)=>{
         const index=originalUid?list.findIndex(x=>x.uid===originalUid):-1;
         if(originalUid&&index<0)throw Error('原记录已变更，请重新选择。');
-        const data={form,size,zone:selected,location:locationText};
+        const data={form,size,zone:selected,location:locationText,spot:spotId||'',spotName:spotId?(CampusSpots.byId.get(spotId)?.name||''):''};
         if(photoPalette)data.palette=photoPalette;
         const previous=index>=0?GardenLayout.located(list[index]):null;
         const specimen={...(editing?previous:{}),...p,...data,model:cachedModel(p.latin)||p.model};
@@ -249,6 +264,7 @@ function guide(context={}){
   $('take').onclick=()=>choosePhoto($('cam'),context);$('choose').onclick=()=>choosePhoto($('file'),context);
 }
 $('shoot').onclick=$('add').onclick=()=>guide();$('album').onclick=()=>choosePhoto($('file'));$('trial').onclick=()=>library();
+$('campusMap').onclick=()=>openCampusMap();$('phenology').onclick=()=>openPhenology();
 function prepare(file){
   const url=URL.createObjectURL(file);
   return (async()=>{try{

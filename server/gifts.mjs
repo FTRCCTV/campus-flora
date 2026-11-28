@@ -18,7 +18,7 @@ export async function giftsApi(request,env){
     if(!user)return authJson({error:'请先登录植迹账号。'},401);
     if(request.method==='GET'){
       const {gifts}=await giftGarden(env,user.id);
-      return authJson({gifts:gifts.map(({id,from,plant,kind})=>({id,from,plant,kind:kind||'cutting'}))});
+      return authJson({gifts:gifts.map(({id,from,plant,kind,wantsReturn})=>({id,from,plant,kind:kind||'cutting',...(wantsReturn?{wantsReturn:true}:{})}))});
     }
     if(request.method!=='POST')return authJson({error:'请求方式有误。'},405);
     if(!sameOrigin(request,env))return authJson({error:'请求来源不匹配。'},403);
@@ -42,7 +42,7 @@ export async function giftsApi(request,env){
       const plant=sharedPlant(source);
       for(const key of ['slot','x','z','growth','generation'])delete plant[key];
       if(seed){plant.generation=Math.min(1000000,(source.generation??1)+1);plant.growth=0}
-      garden.gifts.push({id:crypto.randomUUID(),from:user.name,sender:user.id,source:sourceId,kind,plant});
+      garden.gifts.push({id:crypto.randomUUID(),from:user.name,sender:user.id,source:sourceId,kind,plant,...(b.wantsReturn===true?{wantsReturn:true}:{})});
       return saveGiftGarden(env,garden);
     }
     if(!['accept','decline'].includes(b.action))return authJson({error:'操作无效。'},400);

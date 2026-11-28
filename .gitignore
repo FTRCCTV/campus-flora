@@ -6,3 +6,5 @@ netlify-public/
 node_modules/
 offline/campus-flora-offline.html
 campus-flora-offline.html
+flora-data/
+*.sqlite

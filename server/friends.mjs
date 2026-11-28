@@ -2,6 +2,34 @@ import {currentUser,authJson,nameKey,authQuota,sameOrigin} from './auth.mjs';
 
 const displayFields=['name','latin','family','form','size','zone','slot','x','z','rotation','potStyle','potSticker','plantCharm','growth','generation'];
 const modelFields=['form','leaf','bloom','height','spread','count','leafShape','crownShape','petals','arrangement','inflorescence','leafAspect','margin','profileVersion','fact'];
+// Guestbook comments live next to the friendship edge rather than the garden, so
+// they survive layout changes and can be shared by both friends.
+const commentMaxText=200,commentStored=100,commentPage=50,commentQuota=20,commentWindowMs=10*60*1000;
+const commentKey=id=>'social/comments/v1/'+encodeURIComponent(id)+'.json';
+const commentQuotaKey=id=>'social/comments/quota/'+encodeURIComponent(id);
+async function readComments(env,id){
+  const object=await env.BUCKET.get(commentKey(id));
+  if(!object)return {object:null,list:[]};
+  let list=[];
+  try{const data=await object.json();if(Array.isArray(data))list=data}catch{}
+  return {object,list};
+}
+// Same compare-and-swap shape as the auth counters: the window and count travel
+// in one object so a retried write can never spend quota twice.
+async function takeCommentQuota(env,id){
+  const key=commentQuotaKey(id),now=Date.now();
+  for(let attempt=0;attempt<4;attempt++){
+    const object=await env.BUCKET.get(key);
+    let current=null;
+    if(object){try{current=await object.json()}catch{current=null}}
+    if(current&&Number.isInteger(current.n)&&current.n>=commentQuota&&current.until>now)return false;
+    const next=!current||current.until<=now?{until:now+commentWindowMs,n:0}:current;
+    next.n++;
+    const onlyIf=new Headers(object?{'If-Match':object.httpEtag}:{'If-None-Match':'*'});
+    if(await env.BUCKET.put(key,JSON.stringify(next),{onlyIf}))return true;
+  }
+  return false;
+}
 export function sharedPlant(plant){
   const entry=Object.fromEntries(displayFields.filter(k=>['string','number'].includes(typeof plant[k])).map(k=>[k,plant[k]]));
   if(plant.palette)entry.palette=Object.fromEntries(['leaf','bloom'].filter(k=>/^#[0-9a-f]{6}$/i.test(plant.palette[k])).map(k=>[k,plant.palette[k]]));
@@ -22,6 +50,14 @@ export async function friendsApi(request,env){
         const garden=await env.BUCKET.get('gardens/v1/'+encodeURIComponent(peer)+'.json');
         const {records,design}=GardenLayout.unpack(garden?await garden.json():[]);
         return authJson({name:outgoing?edge.recipient_name:edge.sender_name,plants:records.map(sharedPlant),design:{scene:design.scene,weather:design.weather,effect:design.effect,decorations:design.decorations}});
+      }
+      if(url.searchParams.has('comments')){
+        const id=url.searchParams.get('comments');
+        if(!id||id.length>80)return authJson({error:'留言对象无效。'},400);
+        const edge=await db.prepare('SELECT * FROM garden_friends WHERE id=? AND accepted=1 AND (sender=? OR recipient=?)').bind(id,user.id,user.id).first();
+        if(!edge)return authJson({error:'只有花友才能查看这座花园的留言。'},403);
+        const {list}=await readComments(env,id);
+        return authJson({comments:list.slice(0,commentPage).map(c=>({id:c.id,fromName:c.fromName,text:c.text,date:c.date,own:c.fromId===user.id}))});
       }
       const {results}=await db.prepare('SELECT * FROM garden_friends WHERE sender=? OR recipient=? ORDER BY rowid DESC').bind(user.id,user.id).all();
       return authJson({people:results.map(edge=>{
@@ -44,6 +80,24 @@ export async function friendsApi(request,env){
       const result=await db.prepare('INSERT INTO garden_friends(id,sender,recipient,sender_name,recipient_name) VALUES (?,?,?,?,?) ON CONFLICT DO NOTHING').bind(crypto.randomUUID(),user.id,peer.id,user.name,peer.name).run();
       if(!result.meta.changes)return authJson({error:'已有好友关系或申请，请查看列表。'},409);
       return authJson({ok:true},201);
+    }
+    if(body?.action==='comment'){
+      const id=body.id;
+      if(typeof id!=='string'||!id||id.length>80)return authJson({error:'留言对象无效。'},400);
+      const edge=await db.prepare('SELECT * FROM garden_friends WHERE id=? AND accepted=1 AND (sender=? OR recipient=?)').bind(id,user.id,user.id).first();
+      if(!edge)return authJson({error:'只有花友才能留言。'},403);
+      const text=typeof body.text==='string'?body.text.trim():'';
+      if(!text)return authJson({error:'请写一句留言再发送。'},400);
+      if(text.length>commentMaxText)return authJson({error:'留言最多 200 字。'},400);
+      if(!await takeCommentQuota(env,user.id))return authJson({error:'留言太频繁，请十分钟后再试。'},429);
+      const entry={id:crypto.randomUUID(),fromId:user.id,fromName:user.name,text,date:new Date().toISOString()};
+      for(let attempt=0;attempt<4;attempt++){
+        const {object,list}=await readComments(env,id);
+        const next=[entry,...list].slice(0,commentStored);
+        const saved=await env.BUCKET.put(commentKey(id),JSON.stringify(next),{onlyIf:new Headers(object?{'If-Match':object.httpEtag}:{'If-None-Match':'*'})});
+        if(saved)return authJson({ok:true});
+      }
+      return authJson({error:'留言区刚有更新，请重试。'},409);
     }
     if(typeof body?.id!=='string'||body.id.length!==36)return authJson({error:'申请无效。'},400);
     const mutations={
