@@ -1,0 +1,73 @@
+name: Release
+
+# 推送 v* 标签时，在 Windows 上打包离线版：Go 启动器 + 纯离线图鉴。
+#
+# 发版前请手动更新版本号：offline/main.go:26 的 appVersion 改成与标签一致
+# （例如标签 v0.11.0 → appVersion = "campus-flora-local/0.11.0"）。
+# 这里刻意不做 Go ldflags 版本注入：构建与验证环境没有 Go 工具链，
+# 未经验证的注入逻辑比一次明确的手工修改更危险。
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write # softprops/action-gh-release 需要创建 Release 并上传资产
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows-package:
+    name: Windows 离线包
+    runs-on: windows-latest
+    steps:
+      - name: 检出源码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # generate_release_notes 需要完整提交历史
+
+      - name: 安装 Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      # 仓库里没有 go.mod / go.sum（offline/main.go 只依赖标准库），
+      # 所以使用 stable 版本且不开启 Go module 缓存。
+      - name: 安装 Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
+      - name: 安装依赖
+        run: npm ci --no-audit --no-fund
+
+      - name: 发版前构建校验（产物与源码同步）
+        run: |
+          node build.mjs
+          node scripts/verify-bundle.mjs
+
+      - name: 打包离线 ZIP
+        run: |
+          New-Item -ItemType Directory -Force -Path release-assets | Out-Null
+          pwsh ./offline/package.ps1 -OutputZip release-assets/campus-flora-windows-x64.zip
+
+      - name: 收集发布资产
+        run: |
+          Copy-Item -LiteralPath offline/campus-flora-offline.html -Destination release-assets/campus-flora-offline.html -Force
+          Get-ChildItem release-assets | Select-Object Name, Length
+          # 记录写入二进制的版本号，便于核对是否与标签一致
+          Select-String -Path offline/main.go -Pattern 'appVersion' | ForEach-Object { $_.Line.Trim() }
+
+      - name: 创建 GitHub Release 并上传资产
+        uses: softprops/action-gh-release@v2
+        with:
+          name: 植迹 ${{ github.ref_name }}
+          files: |
+            release-assets/campus-flora-windows-x64.zip
+            release-assets/campus-flora-offline.html
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

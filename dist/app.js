@@ -222,7 +222,7 @@ function plantEditor(options,photo,demo,context={}){
   $('save').onclick=async()=>{
     const p=options[Number($('species').value)],form=plantProfile({...p,model:cachedModel(p.latin)||p.model}).form,size=$('size').value,selected=$('bed').value;
     if(!size||!selected){$('feedback').textContent='请选择展示大小和区域。';return}
-    const plantedId=editing?originalUid:crypto.randomUUID(),locationText=$('place').value.trim(),button=$('save');button.disabled=true;
+    const plantedId=editing?originalUid:newUid(),locationText=$('place').value.trim(),button=$('save');button.disabled=true;
     try{
       const photoPalette=await colorsFor(form);
       changeStudioDraft((list,design)=>{
@@ -287,3 +287,5 @@ for(const input of [$('cam'),$('file')])input.onchange=async()=>{
 };
 $('carePick').onchange=renderGardenCare;
 initStudio();window.addEventListener('hashchange',route);setAccountButton();route();if(!localGardenOnly)void refreshAccount();
+window.addEventListener('error',event=>{if(event&&event.error)console.error(event.error);try{toast('页面遇到了一点问题，已尽力继续运行；若界面异常请刷新。')}catch{}});
+window.addEventListener('unhandledrejection',event=>{console.error(event.reason)});

@@ -724,7 +724,7 @@ function addSpecimenCharm(faces,style,[x,y,z],size,soil){
 }
 
 function paintSpecimen(canvas, plant, {potted=false,portrait=true,width=520,height=460,angle=.34,pitch=.28,zoom=1,faces}={}) {
-  const ctx=canvas.getContext('2d');canvas.width=width;canvas.height=height;
+  const ctx=canvas.getContext('2d');if(canvas.width!==width||canvas.height!==height){canvas.width=width;canvas.height=height}else ctx.clearRect(0,0,width,height);
   const ca=Math.cos(angle),sa=Math.sin(angle),cp=Math.cos(pitch),sp=Math.sin(pitch);
   let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
   const projected=(faces??specimenMesh(plant,potted)).map(f=>{

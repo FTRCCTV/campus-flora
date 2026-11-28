@@ -20,12 +20,13 @@ async function refreshAccount({silent=false}={}){
     const changed=previous!==data.user?.id;
     Object.assign(gardenAccount,{mode:data.user?'member':'guest',user:data.user||null,records:data.records||[],design:data.design||GardenLayout.empty(),version:data.version||'new'});
     if(changed&&modal.open)modal.close();
-    setAccountButton();route();
+    setAccountButton();route();clearTimeout(refreshAccount.retryTimer);
   }catch{
     if(epoch!==sessionEpoch)return;
-    Object.assign(gardenAccount,{mode:'failed',user:null,records:[],design:GardenLayout.empty(),version:'new'});
+    gardenAccount.mode=gardenAccount.user?'failed':'guest';
     if(modal.open)modal.close();
-    setAccountButton();route();if(!silent)toast('账号连接失败，请点击「重连账号」。');
+    setAccountButton();route();if(!silent)toast('账号连接失败，正在用本机缓存继续；恢复网络后会自动重连。');
+    clearTimeout(refreshAccount.retryTimer);refreshAccount.retryTimer=setTimeout(()=>{if(!saveBusy)refreshAccount({silent:true})},15000);
   }
 }
 async function saveMemberGarden(update){
@@ -94,7 +95,7 @@ function passwordPanel(){
 }
 function accountPanel(){
   const {mode,user}=gardenAccount;
-  if(mode==='failed'){refreshAccount();return}
+  if(mode==='failed'){toast('账号连接已断开，正在重试；期间可继续浏览已缓存的花园。');refreshAccount();return}
   if(mode!=='member'){
     if(!localGardenOnly){loginPanel();return}
     show('<div class="body accountPanel"><h2>本机花园</h2><p>观察手记保存在当前浏览器。在线版支持账号登录与云端花园。</p><a class="primary" target="_top" href="'+hosted+'">打开在线版</a><button class="light" id="stayLocal">继续本机体验</button></div>');
@@ -145,18 +146,6 @@ function accountPanel(){
     }catch(e){feedback.textContent=e.message;trigger.disabled=false}
   };
   btn.onclick=()=>mergeRecords(pending,btn,guestDesign);
-  fetch('/api/auth/previous-garden',{method:'HEAD',cache:'no-store'}).then(res=>{
-    if(!res.ok||!btn.isConnected)return;
-    const prior=document.createElement('button');prior.className='light';prior.textContent='导入旧账号花园';btn.after(prior);
-    prior.onclick=async()=>{
-      prior.disabled=true;
-      try{
-        const result=await fetch('/api/auth/previous-garden',{cache:'no-store'});
-        if(!result.ok)throw Error();
-        const old=await result.json();await mergeRecords(old.records,prior,old.design);
-      }catch{prior.disabled=false;feedback.textContent='读取旧花园失败，请重试。'}
-    };
-  }).catch(()=>{});
 }
 accountButton.onclick=accountPanel;
 window.addEventListener('pageshow',e=>{if(e.persisted)refreshAccount({silent:true})});

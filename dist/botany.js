@@ -31,3 +31,4 @@ function plate(canvas,id,hero=false){
  }else if(id===1){stem([459,216],[360,169],[265,122],[157,93],3);for(let [bx,by,x,y,s,r] of [[329,154,340,108,.97,.35],[284,132,245,147,.94,-1.89],[245,119,214,95,.95,-.32],[193,104,150,100,.73,-.97]]){stem([bx,by],[bx-10,by],[x+3,y+2],[x,y],1.5);drawLeaf(c,1,x,y,s,r)}}
  else{for(let j=0;j<3;j++){let x=170+j*88;stem([x+90,-30],[x+40,18],[x,118],[x-26,211],1.8);for(let k=0;k<8;k++){let t=k/8;drawLeaf(c,2,x+53-85*t,10+176*t,.48+.15*Math.sin(t*3),k%2?2.62:-2.43,k%3===1)}}}c.restore();
 }
+function newUid(){try{if(crypto&&crypto.randomUUID)return crypto.randomUUID()}catch{}const b=crypto.getRandomValues(new Uint8Array(16));b[6]=(b[6]&15)|64;b[8]=(b[8]&63)|128;return [...b].map((v,i)=>(i===4||i===6||i===8||i===10?'-':'')+v.toString(16).padStart(2,'0')).join('')}

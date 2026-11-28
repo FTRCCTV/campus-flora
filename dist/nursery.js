@@ -115,7 +115,7 @@ function openSeedPocket(){
     sow.onclick=()=>{
       try{
         if(owner!==studioOwner()||visitingGarden)throw Error('花园已切换，请重新打开种子袋。');
-        const child={...packet,uid:crypto.randomUUID(),growth:0,generation:Math.min(1000000,packet.generation+1),zone:area.value,
+        const child={...packet,uid:newUid(),growth:0,generation:Math.min(1000000,packet.generation+1),zone:area.value,
           date:new Date().toLocaleDateString('zh-CN'),photo:art.toDataURL('image/jpeg',.82)};
         changeStudioDraft((records,design)=>{
           Object.assign(child,GardenLayout.place(child,records.concat(design.decorations)));records.unshift(child);

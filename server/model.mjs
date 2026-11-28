@@ -1,3 +1,5 @@
+import {guard} from './quota.mjs';
+
 // Geometry and shading are owned by the garden renderer. The model chooses only
 // botanical traits and named swatches from the garden's existing palette.
 const forms = ['tree', 'shrub', 'flower', 'grass', 'rosette', 'herb'];
@@ -45,9 +47,12 @@ export async function modelPlant(request, env, upstream = fetch) {
   if (request.method !== 'POST') return reply({error:'method'}, 405);
   const origin = request.headers.get('origin');
   if (origin && origin !== new URL(request.url).origin) return reply({error:'origin'}, 403);
+  if (Number(request.headers.get('content-length') || 0) > 2048) return reply({error:'species'}, 413);
+  if (!env.DEEPSEEK_API_KEY) return reply({reason:'unconfigured'}, 503);
+  const {ok} = await guard(request, env, {name:'model', anonymousLimit:8, memberLimit:60, globalLimit:240});
+  if (!ok) return reply({reason:'rate_limit'}, 429);
   const input = await request.json().catch(()=>null);
   if (typeof input?.latin !== 'string' || !input.latin.trim() || input.latin.length > 160) return reply({error:'species'}, 400);
-  if (!env.DEEPSEEK_API_KEY) return reply({reason:'unconfigured'}, 503);
   try {
     const response = await upstream('https://api.deepseek.com/chat/completions', {
       method:'POST', headers:{Authorization:'Bearer '+env.DEEPSEEK_API_KEY,'Content-Type':'application/json'},

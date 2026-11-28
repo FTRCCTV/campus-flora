@@ -36,7 +36,18 @@ function localGarden(){
   return list;
 }
 function localDocument(){
-  const data=GardenLayout.unpack(JSON.parse(localStorage.getItem(gardenKey)||'[]'));
+  let raw='[]';
+  try{raw=localStorage.getItem(gardenKey)||'[]'}catch{}
+  let data;
+  try{
+    const parsed=JSON.parse(raw);
+    if(!Array.isArray(parsed)&&(!parsed||typeof parsed!=='object'||!Array.isArray(parsed.records)||(parsed.design&&!Array.isArray(parsed.design.decorations))))throw Error('记录格式异常');
+    data=GardenLayout.unpack(parsed);
+  }catch{
+    try{localStorage.setItem(gardenKey+'.broken.'+Date.now(),raw)}catch{}
+    try{localStorage.removeItem(gardenKey)}catch{}
+    data=GardenLayout.unpack([]);
+  }
   // Early local records referred to a catalogue entry by its numeric index.
   const legacy=data.records.filter(r=>!r.latin&&plants[r.id]).map(r=>plants[r.id]);
   if(legacy.length)data.design.discovered=GardenLayout.discoveries(legacy,data.design.discovered);
@@ -46,19 +57,21 @@ function readDesign(){return visitingGarden?.design||activeStudioDraft()?.design
 function readGarden(){
   if(activeStudioDraft())return activeStudioDraft().records;
   if(gardenAccount.user)return structuredClone(gardenAccount.records);
-  return gardenAccount.mode==='guest'?localGarden():[];
+  return gardenAccount.mode==='guest'||gardenAccount.mode==='failed'?localGarden():[];
 }
 async function writeGarden(update){
   const owner=gardenAccount.user?.id||null;
   const write=async()=>{
     if(owner!==(gardenAccount.user?.id||null))throw Error('账号已切换，请重新操作。');
     if(gardenAccount.mode==='member')return saveMemberGarden(update);
+    if(gardenAccount.mode==='failed'&&gardenAccount.user)throw Error('与账号的连接已中断，正在自动重连；等网络恢复后再保存这次修改。');
     if(gardenAccount.mode!=='guest')throw Error('请等账号连接完成，或在账号面板中重试。');
     const list=localGarden(),design=localDocument().design;update(list,design);
     design.seeds=GardenLayout.seedCatalogue(list,design.seeds);
     design.discovered=GardenLayout.discoveries(list,design.discovered);
     if(!GardenLayout.valid(list,design))throw Error('物品重叠或位置无效。');
-    localStorage.setItem(gardenKey,JSON.stringify({records:list,design}));
+    try{localStorage.setItem(gardenKey,JSON.stringify({records:list,design}))}
+    catch{throw Error('浏览器存储空间不足，这次修改没有保存。可以移除一些旧记录，或登录账号把花园同步到云端。')}
   };
   if(navigator.locks)await navigator.locks.request(gardenKey,write);else await write();
 }

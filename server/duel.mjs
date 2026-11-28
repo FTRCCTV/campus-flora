@@ -1,4 +1,5 @@
-import {currentUser,authJson,authQuota} from './auth.mjs';
+import {currentUser,authJson} from './auth.mjs';
+import {guard} from './quota.mjs';
 import '../dist/profile.js';
 import '../dist/layout.js';
 import '../dist/duel-rules.js';
@@ -32,10 +33,13 @@ export async function duelFaction(request,env,upstream=fetch){
     const saved=await env.BUCKET.get(factionKey(key));
     if(saved)return authJson(await saved.json());
     if(!env.DEEPSEEK_API_KEY)return authJson({error:'体系判定服务尚未配置。'},503);
-    if(!pendingFactions.has(key)){
-      if(!await authQuota(request,env,'duel-faction'))return authJson({error:'请求较多，请稍后重试。'},429);
-      if(!pendingFactions.has(key))pendingFactions.set(key,assignFaction(key,env,upstream).finally(()=>pendingFactions.delete(key)));
-    }
+    // Anonymous visitors only classify catalogue species, so random binomials can
+    // no longer each trigger a paid model call; members keep the wider allowance
+    // that AI-modelled garden species need.
+    const {ok,user}=await guard(request,env,{name:'faction',anonymousLimit:30,memberLimit:150,globalLimit:900});
+    if(!ok)return authJson({error:'请求较多，请稍后重试。'},429);
+    if(!user&&!FloraCatalog.isKnownSpecies(key))return authJson({error:'该物种暂无攻防体系，可作为普通阻挡。'},422);
+    if(!pendingFactions.has(key))pendingFactions.set(key,assignFaction(key,env,upstream).finally(()=>pendingFactions.delete(key)));
     return authJson(await pendingFactions.get(key));
   }catch{return authJson({error:'物种资料暂不可用。'},503)}
 }

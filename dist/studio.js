@@ -168,7 +168,7 @@ function initStudio(){
   $('addProp').onclick=()=>editStudioLayout((records,design)=>{
     const kind=$('propChoice').value;
     if(!GardenLayout.unlocked(kind,design.discovered.length))throw Error('收集更多物种后可添加这件装饰。');
-    const p={uid:crypto.randomUUID(),kind,zone};
+    const p={uid:newUid(),kind,zone};
     Object.assign(p,GardenLayout.place(p,records.concat(design.decorations)));
     design.decorations.push(p);studio.selected=p.uid;
   });

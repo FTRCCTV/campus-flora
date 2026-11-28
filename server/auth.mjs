@@ -94,19 +94,9 @@ async function credentials(request,env,action){
 }
 export async function publicAuth(request,env,path){
   try{
-    if(path==='previous-garden'){
-      if(!['GET','HEAD'].includes(request.method))return authJson({error:'请求方式有误。'},405);
-      const priorId=request.headers.get('oai-authenticated-user-id');
-      if(!new URL(request.url).hostname.endsWith('.chatgpt.site')||!priorId||
-         !request.headers.get('oai-authenticated-user-email')||!await currentUser(request,env))return authJson({},404);
-      const key='gardens/v1/'+encodeURIComponent(priorId)+'.json';
-      if(request.method==='HEAD'){
-        const exists=await env.BUCKET.head(key);
-        return new Response(null,{status:exists?200:404,headers:{'Cache-Control':'private, no-store','Vary':'Cookie'}});
-      }
-      const prior=await env.BUCKET.get(key);
-      return prior?authJson(GardenLayout.unpack(await prior.json())):authJson({},404);
-    }
+    // The legacy "import the previous platform account" path used to trust
+    // oai-authenticated-user-id, a plain request header, to choose whose garden
+    // to read. It is retired: nothing here may name another account's object.
     if(!['login','register','logout','password'].includes(path))return authJson({error:'接口不存在。'},404);
     if(request.method!=='POST')return authJson({error:'需要 POST 请求。'},405);
     if(request.headers.get('Origin')!==new URL(request.url).origin)return authJson({error:'请求来源不匹配。'},403);

@@ -1,0 +1,74 @@
+name: CI
+
+# 每次推送与 Pull Request 都验证：依赖可安装、构建可复现、产物与源码同步、回归测试通过。
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: 构建校验与回归测试
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出源码
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: 安装 Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: 安装依赖（按 package-lock.json 锁定版本）
+        run: npm ci --no-audit --no-fund
+
+      - name: 构建 Worker bundle
+        run: node build.mjs
+
+      - name: 语法检查产物
+        run: node --check dist/server/index.js
+
+      - name: 校验产物与源码同步
+        run: node scripts/verify-bundle.mjs
+
+      - name: 校验构建可复现（连续两次构建逐字节一致）
+        run: |
+          first=$(sha256sum dist/server/index.js | cut -d' ' -f1)
+          node build.mjs
+          second=$(sha256sum dist/server/index.js | cut -d' ' -f1)
+          echo "build #1 sha256: $first"
+          echo "build #2 sha256: $second"
+          test "$first" = "$second"
+
+      # tests/nursery.test.mjs 直接 import dist/server/index.js，
+      # 所以这一步必须排在构建之后，否则会因产物不存在而失败。
+      - name: 回归测试
+        run: node --test tests/
+
+      - name: 构建离线单文件版
+        run: node build.mjs campus-flora-offline.html
+
+      - name: 构建 Netlify 静态站
+        run: node netlify/build.mjs
+
+      # 构建可复现的最终判据：重新构建后仓库里的 dist/server/index.js 不应有改动。
+      # 注意：统一行尾归一化后 const page= 那一行的 \r\n 转义会变成 \n，
+      # 因此需要先提交一次重新生成的 dist/server/index.js
+      # （本地执行 `npm run build && git add dist/server/index.js`）。
+      # 在那之前这一步只给出告警，避免挡住与产物刷新无关的推送；
+      # 产物刷新提交之后，可以把 continue-on-error 去掉，让它成为硬性门禁。
+      - name: 提交版本与重新构建一致（产物待刷新时告警）
+        continue-on-error: true
+        run: |
+          git --no-pager diff --stat -- dist/server/index.js
+          git diff --exit-code -- dist/server/index.js

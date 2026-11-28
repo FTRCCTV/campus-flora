@@ -469,7 +469,8 @@ function collectedSpeciesKey(latin){
   return Object.hasOwn(floraAliases,key)?floraAliases[key]:key;
 }
 const FloraCatalog = {speciesKey:collectedSpeciesKey,lookup:floraLookup,labels:floraTraitLabels,vocab:floraVocab,foliage:floraFoliage,bloom:floraBloom,bark:floraBark,accent:floraAccent,
-  sources:floraSourceNames,species:()=>[...floraIndex.keys()],genera:()=>Object.keys(floraGenera),families:()=>Object.keys(floraFamilies),name:plantChineseName};
+  sources:floraSourceNames,species:()=>[...floraIndex.keys()],genera:()=>Object.keys(floraGenera),families:()=>Object.keys(floraFamilies),name:plantChineseName,
+  isKnownSpecies:key=>floraIndex.has(key)};
 globalThis.plantProfile=plantProfile;globalThis.FloraCatalog=FloraCatalog;
 const sillExamples=[
   {name:'雏菊',latin:'Bellis perennis',family:'菊科',note:'黄花心周围绕着一圈浅色的小花。'},
