@@ -13,9 +13,13 @@ const inlineScript = code => '<script>'+code.replace(/<\/script/gi,'<\\/script')
 export function bundle(){
   let html=read('./dist/index.html').replace(/<link rel="stylesheet" href="([\w.-]+\.css)">/g,(_,file)=>'<style>'+read('./dist/'+file)+'</style>');
   html=html.replace(/<script src="([\w.-]+)"><\/script>/g,(_,file)=>inlineScript(read('./dist/'+file)));
-  const code=['layout','profile','specimen','duel-rules'].map(name=>read('./dist/'+name+'.js')).join('\n')+'\n'+read('./server/auth.mjs')+'\n'+read('./server/quota.mjs').replace(/^import .*;$/gm,'')+'\n'+read('./server/account.mjs').replace("import {currentUser} from './auth.mjs';",'').replace(/^import '\.\.\/dist\/[a-z]+\.js';$/gm,'')+'\n'+read('./server/friends.mjs').replace("import {currentUser,authJson,nameKey,authQuota} from './auth.mjs';",'')+'\n'+read('./server/gifts.mjs').replace(/^import .*;$/gm,'')+'\n'+read('./server/duel.mjs').replace(/^import .*;$/gm,'')+'\n'+read('./server/identify.mjs').replace(/^import .*;$/gm,'')+'\n'+read('./server/model.mjs').replace(/^import .*;$/gm,'')+'\n'+
+  // Server modules are concatenated into a single scope, so their relative imports
+  // are dropped: auth is emitted first and every later module uses those bindings.
+  const serverModule = name => read('./server/'+name+'.mjs').replace(/^import .*;$/gm,'');
+  const code=['layout','profile','specimen','duel-rules'].map(name=>read('./dist/'+name+'.js')).join('\n')+'\n'+
+    ['auth','quota','account','friends','gifts','duel','identify','model'].map(serverModule).join('\n')+'\n'+
   'const page='+JSON.stringify(html)+';\n'+
-  "export default {fetch(request,env){const path=new URL(request.url).pathname;if(path.startsWith('/api/auth/'))return publicAuth(request,env,path.slice(10));if(path==='/api/duel')return duelApi(request,env);if(path==='/api/faction')return duelFaction(request,env);if(path==='/api/gifts')return giftsApi(request,env);if(path==='/api/friends')return friendsApi(request,env);if(path==='/api/account')return accountGarden(request,env);if(path==='/api/model')return modelPlant(request,env);if(path==='/api/identify')return identify(request,env);if(path==='/'||path==='/index.html')return new Response(page,{headers:{'content-type':'text/html; charset=utf-8'}});return new Response('Not found',{status:404})}};";
+  "export default {fetch(request,env){const path=new URL(request.url).pathname;if(path.startsWith('/api/auth/'))return publicAuth(request,env,path.slice(10));if(path==='/api/duel')return duelApi(request,env);if(path==='/api/faction')return duelFaction(request,env);if(path==='/api/gifts')return giftsApi(request,env);if(path==='/api/friends')return friendsApi(request,env);if(path==='/api/account')return accountGarden(request,env);if(path==='/api/model')return modelPlant(request,env);if(path==='/api/identify')return identify(request,env);if(path==='/'||path==='/index.html')return new Response(page,{headers:{'content-type':'text/html; charset=utf-8','cache-control':'no-cache','x-content-type-options':'nosniff','referrer-policy':'no-referrer','x-frame-options':'DENY'}});return new Response('Not found',{status:404})}};";
   return {code,html};
 }
 

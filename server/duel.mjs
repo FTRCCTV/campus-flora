@@ -1,4 +1,4 @@
-import {currentUser,authJson} from './auth.mjs';
+import {currentUser,authJson,sameOrigin} from './auth.mjs';
 import {guard} from './quota.mjs';
 import '../dist/profile.js';
 import '../dist/layout.js';
@@ -25,20 +25,20 @@ export async function duelFaction(request,env,upstream=fetch){
   try{
     if(request.method!=='POST')return authJson({error:'请提交一个物种。'},405);
     const origin=request.headers.get('Origin');
-    if(origin&&origin!==new URL(request.url).origin)return authJson({error:'来源不符。'},403);
+    if(origin&&!sameOrigin(request,env))return authJson({error:'来源不符。'},403);
     const body=await request.json().catch(()=>null);
     if(typeof body?.latin!=='string'||body.latin.length>160)return authJson({error:'学名无效。'},400);
     const key=FloraCatalog.speciesKey(body.latin);
     if(!key)return authJson({error:'尚未识别到具体物种，可作普通阻挡。'},422);
     const saved=await env.BUCKET.get(factionKey(key));
     if(saved)return authJson(await saved.json());
-    if(!env.DEEPSEEK_API_KEY)return authJson({error:'体系判定服务尚未配置。'},503);
     // Anonymous visitors only classify catalogue species, so random binomials can
     // no longer each trigger a paid model call; members keep the wider allowance
     // that AI-modelled garden species need.
     const {ok,user}=await guard(request,env,{name:'faction',anonymousLimit:30,memberLimit:150,globalLimit:900});
     if(!ok)return authJson({error:'请求较多，请稍后重试。'},429);
     if(!user&&!FloraCatalog.isKnownSpecies(key))return authJson({error:'该物种暂无攻防体系，可作为普通阻挡。'},422);
+    if(!env.DEEPSEEK_API_KEY)return authJson({error:'体系判定服务尚未配置。'},503);
     if(!pendingFactions.has(key))pendingFactions.set(key,assignFaction(key,env,upstream).finally(()=>pendingFactions.delete(key)));
     return authJson(await pendingFactions.get(key));
   }catch{return authJson({error:'物种资料暂不可用。'},503)}
@@ -96,7 +96,7 @@ export async function duelApi(request,env){
       ButterflyDuel.planFlight(room.board,()=>((seed=(Math.imul(seed,1664525)+1013904223)>>>0)/4294967296));
     }
     if(request.method==='GET')return authJson({room:duelView(room,user)});
-    if(request.method!=='POST'||request.headers.get('Origin')!==url.origin)return authJson({error:'请求不符。'},403);
+    if(request.method!=='POST'||!sameOrigin(request,env))return authJson({error:'请求不符。'},403);
     const data=await request.json().catch(()=>null);
     if(!data||data.rev!==(room?.rev??0)||data.match!==(room?.match??null))return authJson({error:'棋盘已更新，请查看最新回合。'},409);
     const other=edge.sender===user.id?edge.recipient:edge.sender;

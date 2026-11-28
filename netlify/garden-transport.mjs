@@ -1,4 +1,4 @@
-import {currentUser,authJson} from '../server/auth.mjs';
+import {currentUser,authJson,sameOrigin} from '../server/auth.mjs';
 import {accountGarden} from '../server/account.mjs';
 const chunkSize=2*1024*1024;
 export async function readGarden(request,env){
@@ -13,7 +13,7 @@ export async function readGarden(request,env){
 }
 export async function uploadGarden(request,env){
   const url=new URL(request.url);
-  if(request.headers.get('Origin')!==url.origin)return authJson({error:'请求来源不匹配。'},403);
+  if(!sameOrigin(request,env))return authJson({error:'请求来源不匹配。'},403);
   const user=await currentUser(request,env);
   if(!user)return authJson({error:'请先登录账号。'},401);
   const transfer=url.searchParams.get('transfer');

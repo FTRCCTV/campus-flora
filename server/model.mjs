@@ -1,3 +1,4 @@
+import {sameOrigin} from './auth.mjs';
 import {guard} from './quota.mjs';
 
 // Geometry and shading are owned by the garden renderer. The model chooses only
@@ -46,7 +47,7 @@ export async function modelPlant(request, env, upstream = fetch) {
   const reply = (data, status = 200) => Response.json(data, {status, headers:{'cache-control':'no-store'}});
   if (request.method !== 'POST') return reply({error:'method'}, 405);
   const origin = request.headers.get('origin');
-  if (origin && origin !== new URL(request.url).origin) return reply({error:'origin'}, 403);
+  if (origin && !sameOrigin(request, env)) return reply({error:'origin'}, 403);
   if (Number(request.headers.get('content-length') || 0) > 2048) return reply({error:'species'}, 413);
   if (!env.DEEPSEEK_API_KEY) return reply({reason:'unconfigured'}, 503);
   const {ok} = await guard(request, env, {name:'model', anonymousLimit:8, memberLimit:60, globalLimit:240});

@@ -1,4 +1,4 @@
-import {currentUser,authJson,nameKey,authQuota} from './auth.mjs';
+import {currentUser,authJson,nameKey,authQuota,sameOrigin} from './auth.mjs';
 
 const displayFields=['name','latin','family','form','size','zone','slot','x','z','rotation','potStyle','potSticker','plantCharm','growth','generation'];
 const modelFields=['form','leaf','bloom','height','spread','count','leafShape','crownShape','petals','arrangement','inflorescence','leafAspect','margin','profileVersion','fact'];
@@ -30,7 +30,7 @@ export async function friendsApi(request,env){
       })});
     }
     if(request.method!=='POST')return authJson({error:'请求方式有误。'},405);
-    if(request.headers.get('Origin')!==url.origin)return authJson({error:'请求来源不匹配。'},403);
+    if(!sameOrigin(request,env))return authJson({error:'请求来源不匹配。'},403);
     if(!request.headers.get('Content-Type')?.startsWith('application/json'))return authJson({error:'需要 JSON 请求。'},415);
     if(Number(request.headers.get('content-length'))>1024)return authJson({error:'请求过长。'},413);
     const body=await request.json().catch(()=>null);

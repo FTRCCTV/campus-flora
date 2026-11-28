@@ -1,4 +1,4 @@
-import {currentUser,authJson,authQuota} from './auth.mjs';
+import {currentUser,authJson,authQuota,sameOrigin} from './auth.mjs';
 import {sharedPlant} from './friends.mjs';
 
 async function giftGarden(env,id){
@@ -21,7 +21,7 @@ export async function giftsApi(request,env){
       return authJson({gifts:gifts.map(({id,from,plant,kind})=>({id,from,plant,kind:kind||'cutting'}))});
     }
     if(request.method!=='POST')return authJson({error:'请求方式有误。'},405);
-    if(request.headers.get('Origin')!==new URL(request.url).origin)return authJson({error:'请求来源不匹配。'},403);
+    if(!sameOrigin(request,env))return authJson({error:'请求来源不匹配。'},403);
     if(!request.headers.get('Content-Type')?.startsWith('application/json'))return authJson({error:'需要 JSON 请求。'},415);
     if(Number(request.headers.get('Content-Length'))>250000)return authJson({error:'请求过大。'},413);
     const raw=await request.text();

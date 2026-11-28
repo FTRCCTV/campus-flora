@@ -273,10 +273,10 @@ async function identifyPhoto(item,context={}){
       $('connect').onclick=()=>{apiKey=$('token').value.trim();if(apiKey)identifyPhoto(item,context);else $('token').focus()};return;
     }
     if(!response.ok)throw Error(data.error||'识别服务暂时不可用。');
-    if(!data.results.length){preview(item.photo,'未找到匹配植物','<p>请靠近一朵花或一片完整的叶子重新拍摄。</p><button class="light" id="again">换张照片</button>');$('again').onclick=()=>guide(context);return}
+    if(!data.results.length){preview(item.photo,'未找到匹配植物','<p>请靠近一朵花或一片完整的叶子重新拍摄，或直接从图鉴里挑一株种下。</p><button class="light" id="again">换张照片</button><button class="light" id="pickAtlas">从图鉴挑选</button>');$('again').onclick=()=>guide(context);$('pickAtlas').onclick=()=>library(context);return}
     const options=data.results.map(r=>{const known=samples.find(p=>p.latin.startsWith(r.latin+' ')||p.latin===r.latin);return {...r,name:known?.name||FloraCatalog.name(r.latin)||r.name,note:known?.note}});
     plantEditor(options,item.photo,false,context);
-  }catch(e){if(controller.signal.aborted)return;preview(item.photo,'这次识别未完成','<p>'+esc(e.message)+'</p><button class="light" id="retry">重新识别</button>');$('retry').onclick=()=>identifyPhoto(item,context)}
+  }catch(e){if(controller.signal.aborted)return;preview(item.photo,'这次识别未完成','<p>'+esc(e.message)+'</p><button class="light" id="retry">重新识别</button><button class="light" id="pickAtlas">改为从图鉴挑选</button>');$('retry').onclick=()=>identifyPhoto(item,context);$('pickAtlas').onclick=()=>library(context)}
 }
 for(const input of [$('cam'),$('file')])input.onchange=async()=>{
   const context=input.plantContext||{};input.plantContext=null;const file=input.files[0];input.value='';if(!file)return;

@@ -1,16 +1,10 @@
-import {currentUser} from './auth.mjs';
+import {clientIp,currentUser} from './auth.mjs';
 
 // Cost guard for the endpoints that call paid upstreams (Pl@ntNet, DeepSeek).
 // Counters live in the same key-value store as sessions and use the same
 // conditional-write contract, so they work on R2 and on hosts that emulate it.
+// clientIp is shared with the auth layer so both limits believe the same address.
 const defaultWindowMs=10*60*1000;
-const ipPattern=/^[0-9a-fA-F:.]{3,45}$/;
-
-export function clientIp(request){
-  const raw=request.headers.get('cf-connecting-ip')||request.headers.get('x-real-ip')||(request.headers.get('x-forwarded-for')||'').split(',')[0];
-  const address=(raw||'').trim();
-  return ipPattern.test(address)?address:'unknown';
-}
 
 export async function takeQuota(env,key,limit,{windowMs=defaultWindowMs}={}){
   const bucket=env?.BUCKET;

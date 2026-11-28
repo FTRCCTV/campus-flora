@@ -1,4 +1,4 @@
-import {currentUser} from './auth.mjs';
+import {currentUser,sameOrigin} from './auth.mjs';
 import '../dist/layout.js';
 import '../dist/profile.js';
 import '../dist/specimen.js';
@@ -57,7 +57,7 @@ export async function accountGarden(request,env){
       const object=await env.BUCKET.get(objectKey);
       return send({user,version:object?.httpEtag||'new',...GardenLayout.unpack(object?await object.json():[])});
     }
-    if(request.headers.get('Origin')!==new URL(request.url).origin)return send({error:'请求来源不匹配。'},403);
+    if(!sameOrigin(request,env))return send({error:'请求来源不匹配。'},403);
     if(!request.headers.get('content-type')?.startsWith('application/json'))return send({error:'需要 JSON 请求。'},415);
     const maxBytes=16*1024*1024;
     if(Number(request.headers.get('content-length'))>maxBytes)return send({error:'花园已超过同步容量。'},413);

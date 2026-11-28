@@ -5,3 +5,12 @@
 
 [functions]
   node_bundler = "esbuild"
+
+# 静态页是单文件（脚本/样式全内联），无法开严格 CSP；先把防内嵌与嗅探兜住。
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "no-referrer"
+    X-Frame-Options = "DENY"
+    Cache-Control = "public, max-age=0, must-revalidate"

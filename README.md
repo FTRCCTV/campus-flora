@@ -81,12 +81,17 @@ Netlify 站点使用独立的植迹账号和 PostgreSQL 数据库，首次访问
 
 ### Worker
 
-将 `dist/server/index.js` 部署到支持 ES Module Worker 和 Web Fetch API 的运行环境。入口导出 `fetch(request, env)`，同时提供首页、照片识别和株形生成接口。植迹账号和花园数据使用名为 `BUCKET` 的 R2 绑定。密码使用随机盐及 PBKDF2-SHA256 派生，会话使用 HTTPS 下的 HttpOnly Cookie，服务端仅存令牌摘要。浏览器设备通过版本校验避免并发覆盖。请在托管平台配置下列运行时变量。
+将 `dist/server/index.js` 部署到支持 ES Module Worker 和 Web Fetch API 的运行环境。入口导出 `fetch(request, env)`，同时提供首页、照片识别和株形生成接口。植迹账号和花园数据使用名为 `BUCKET` 的 R2 绑定，好友与对局关系使用名为 `DB` 的 D1 绑定（`duel`、`friends`、`gifts` 会读写它）；只配 `BUCKET` 时账号与花园可用，花友与对战接口会返回 503。密码使用随机盐及 PBKDF2-SHA256 派生，会话使用 HTTPS 下的 HttpOnly Cookie，服务端仅存令牌摘要。浏览器设备通过版本校验避免并发覆盖。请在托管平台配置下列运行时变量。
 
 | 配置项 | 用途 |
 | --- | --- |
 | `PLANTNET_API_KEY` | `POST /api/identify` 接收 JPEG 照片并返回候选物种 |
 | `DEEPSEEK_API_KEY` | `POST /api/model` 接收含 `latin` 学名字段的 JSON 并返回株形参数 |
+| `PUBLIC_ORIGIN` | 可选。反代或自定义域名部署时，额外允许的请求来源（逗号分隔的 origin；同源始终放行） |
+| `PASSWORD_ROUNDS` | 可选。PBKDF2 轮数，默认 10 万；调高后老账号在下次登录成功时自动换成新轮数 |
+| `REGISTER_DAILY_LIMIT` | 可选。全站每日注册上限，默认 200 |
+
+`/api/identify`、`/api/model`、`/api/faction` 都带按账号或地址的调用配额（10 分钟窗口）与一条全站上限：匿名识别 30 次、建模 8 次，登录用户分别为 120 次和 60 次。`/api/faction` 对匿名访问只处理校园图鉴内物种，避免随机学名反复触发模型调用。
 
 自行部署时，将 [前端配置](dist/app.js) 中的 `hosted` 地址替换为自己的站点，再执行构建。这样离线版的「打开在线版」会指向自己的服务。
 

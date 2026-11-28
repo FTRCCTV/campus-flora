@@ -1,10 +1,11 @@
+import {sameOrigin} from './auth.mjs';
 import {guard} from './quota.mjs';
 
 export async function identify(request, env, upstream = fetch) {
   const reply = (data, status = 200) => Response.json(data, {status, headers: {'cache-control':'no-store'}});
   if (request.method !== 'POST') return reply({error:'请提交一张植物照片。'},405);
   const origin = request.headers.get('origin');
-  if (origin && origin !== new URL(request.url).origin) return reply({error:'请求来源不匹配。'},403);
+  if (origin && !sameOrigin(request, env)) return reply({error:'请求来源不匹配。'},403);
   const maxPhoto = 4_000_000;
   if (Number(request.headers.get('content-length') || 0) > maxPhoto + 8192) return reply({error:'照片大小超出范围，请换一张。'},413);
   if (request.headers.get('content-type') !== 'image/jpeg') return reply({error:'请使用 JPEG 图像。'},415);
