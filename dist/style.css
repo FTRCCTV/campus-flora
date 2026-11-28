@@ -375,3 +375,4 @@ body[data-atmosphere="meteors"] .pageAtmosphere:before{inset:5% auto auto 91%;wi
 /* 植物名片 */
 .cardPreview{display:grid;place-items:center;gap:10px}
 .cardPreview canvas{max-width:100%;height:auto;border-radius:10px;box-shadow:0 10px 30px rgba(33,62,53,.18)}
+.campusSearch{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:12px 0}.campusSearch input{flex:1 1 150px;min-width:0;padding:10px 12px;border:1px solid #aebaa7;border-radius:8px;background:#fffef8;color:#304d40}.campusSearch+p:empty{display:none}

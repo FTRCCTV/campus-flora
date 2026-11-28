@@ -25,9 +25,10 @@ test('published route is stable until affected, includes the winning edge and ma
     const route=[...s.forecast];game.play(s,null,null,()=>0);assert.deepEqual(s.forecast,route);
     game.play(s,null,null,()=>.99);assert.equal(s.pos,route[0]);assert.deepEqual(s.forecast,s.winner===null?route.slice(1):[]);
   }
-  const t=game.create(()=>0);game.play(t,game.basic,24,()=>0);
-  assert.equal(t.wandering,true);assert.deepEqual(t.forecast,[1]);
-  game.play(t,null,null,()=>.999);assert.equal(t.pos,1);assert.equal(t.forecast.length,1);
+  const t=game.create(()=>0),before=structuredClone(t);
+  assert.throws(()=>game.play(t,game.basic,24),/E5/);assert.deepEqual(t,before);
+  t.cells[1]=wall;assert.throws(()=>game.play(t,game.basic,5),/E5/);
+  assert.throws(()=>game.play(t,{type:'vine',key:'v'},23),/E5/);
 });
 test('shortest detour, random walking, fully trapped flutter and reopening a route',()=>{
   const s=game.create();s.pos=12;s.cells[13]=wall;s.cells[17]=wall;

@@ -22,12 +22,11 @@ test('seedlings fit closer together while overlapping adult crowns still collide
   assert.equal(layout.clear(marker,[lantern]),true);
   assert.equal(layout.blocker({...marker,z:0},[lantern]),lantern);
 });
-test('water and light survive a save, require separate actions, and end in harvest',()=>{
+test('water and fertilizer survive a save, require separate actions, and end in harvest',()=>{
   const p={growth:0,form:'flower'};
   layout.tend(p,'water');assert.equal(p.growth,0);
   assert.throws(()=>layout.tend(p,'water'));
-  const saved=JSON.parse(JSON.stringify(p));layout.tend(saved,'light');
-  assert.equal(saved.care.light,1);layout.tend(saved,'light');
+  const saved=JSON.parse(JSON.stringify(p));assert.throws(()=>layout.tend(saved,'light'));
   assert.equal(saved.growth,0);layout.tend(saved,'nutrient');
   assert.equal(saved.growth,1);assert.equal(saved.care,undefined);
   while(saved.growth<3){

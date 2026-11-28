@@ -1,9 +1,5 @@
 // Tools share the garden viewport and its rendered plant hit map.
 let gardenGesture=null,gardenCareBusy=false,careFrame=0;
-function sceneCareItems(items){
-  const g=gardenGesture;
-  return g?.kind==='light'?items.map(p=>p.uid===g.id?{...p,rotation:g.rotation}:p):items;
-}
 function careAvailable(){
   return studio.mode==='view'&&studioOwner()&&!visitingGarden&&!activeStudioDraft()&&!$('garden').hidden;
 }
@@ -43,7 +39,7 @@ function drawCareShelf(now=performance.now()){
     ctx.fillText(title,x,h-23);
   }
   if(!g)return;
-  if(g.kind!=='light'){
+  {
     paintCareTool(ctx,g.kind,g.x-12,g.y-6,!!g.target,true);
     if(g.target)for(let i=0;i<13;i++){
       const t=(now/430+i/13)%1;
@@ -58,7 +54,7 @@ async function finishGardenGesture(commit){
   gardenGesture=null;cancelAnimationFrame(careFrame);scheduleStudio();
   if(!commit||!g.target||gardenCareBusy)return;
   gardenCareBusy=true;
-  try{await careForPlant(g.target,g.kind,g.owner,g.kind==='light'?g.rotation:undefined);route();toast(g.target.name+'已完成'+careVerbs[g.kind])}
+  try{await careForPlant(g.target,g.kind,g.owner);route();toast(g.target.name+'已完成'+careVerbs[g.kind])}
   catch(e){toast(e.message)}finally{gardenCareBusy=false;scheduleStudio()}
 }
 function initSceneCare(){
@@ -73,7 +69,7 @@ function initSceneCare(){
   function tick(now){
     const g=gardenGesture;if(!g)return;
     if(!careAvailable()||studioScope()!==g.scope){finishGardenGesture(false);return}
-    if(g.kind!=='light'){
+    {
       const plant=target(g.x,g.y,true);
       if(plant?.uid!==g.target?.uid)g.progress=0;
       g.target=plant;
@@ -86,22 +82,19 @@ function initSceneCare(){
   world.addEventListener('pointerdown',e=>{
     if(!careAvailable()||studio.busy||gardenCareBusy||gardenGesture||e.button!==0)return;
     const [x,y]=pos(e),h=world.clientHeight;
-    const kind=x>=8&&x<=136&&y>=h-88&&y<=h-20?(x<72?'water':'nutrient'):'light';
-    const p=kind==='light'?target(x,y,false):null;
-    if(kind==='light'&&!p)return;
+    if(x<8||x>136||y<h-88||y>h-20)return;
+    const kind=x<72?'water':'nutrient';
     e.stopImmediatePropagation();e.preventDefault();world.setPointerCapture(e.pointerId);
-    gardenGesture={kind,pid:e.pointerId,scope:studioScope(),owner:studioOwner(),x,y,start:x,id:p?.uid,target:p,rotation:p?.rotation||0,progress:0,last:performance.now()};
+    gardenGesture={kind,pid:e.pointerId,scope:studioScope(),owner:studioOwner(),x,y,progress:0,last:performance.now()};
     tick(performance.now());
   },true);
   world.addEventListener('pointermove',e=>{
     const g=gardenGesture;if(!g||g.pid!==e.pointerId)return;e.stopImmediatePropagation();
     [g.x,g.y]=pos(e);
-    if(g.kind==='light'){const angle=(g.x-g.start)/65;g.rotation=((g.target.rotation||0)+angle+Math.PI*4)%(Math.PI*2);g.progress=Math.min(1,Math.abs(angle)/(Math.PI/2));scheduleStudio()}
   },true);
   world.addEventListener('pointerup',e=>{
     const g=gardenGesture;if(!g||g.pid!==e.pointerId)return;e.stopImmediatePropagation();
-    const tap=g.kind==='light'&&Math.abs(g.x-g.start)<5;
-    finishGardenGesture(g.kind==='light'&&g.progress===1);if(tap)detail(g.target);
+    finishGardenGesture(false);
   },true);
   for(const event of ['pointercancel','lostpointercapture'])world.addEventListener(event,e=>{if(gardenGesture?.pid===e.pointerId)finishGardenGesture(false)});
 }

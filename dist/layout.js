@@ -26,8 +26,7 @@ const GardenLayout=(()=>{
   function carePlan(plant){
     const stage=plant.growth??2,form=plant.model?.form||plant.form;
     const water=stage===0||form==='rosette'?1:2;
-    const light=stage===2||form==='flower'||form==='rosette'?2:1;
-    return {water,light,nutrient:1};
+    return {water,nutrient:1};
   }
   function tend(plant,action){
     const stage=plant.growth??2;
@@ -35,9 +34,9 @@ const GardenLayout=(()=>{
     if(stage>=3&&['water','nutrient'].includes(action)){
       plant.careCount=Math.min(1000000,(plant.careCount||0)+1);return;
     }
-    const goals=carePlan(plant),care={water:0,light:0,nutrient:0,...plant.care};
-    if(stage>=3||!Object.hasOwn(goals,action)||care[action]>=goals[action])throw Error('这项照料已完成。');
-    care[action]++;
+    const goals=carePlan(plant),care={water:plant.care?.water||0,nutrient:plant.care?.nutrient||0};
+    if(stage>=3||!Object.hasOwn(goals,action)||(care[action]>=goals[action]&&!Object.keys(goals).every(k=>care[k]>=goals[k])))throw Error('这项照料已完成。');
+    care[action]=Math.min(goals[action],care[action]+1);
     plant.careCount=Math.min(1000000,(plant.careCount||0)+1);
     if(Object.keys(goals).every(key=>care[key]>=goals[key])){
       plant.growth=stage+1;delete plant.care;

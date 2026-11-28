@@ -30,7 +30,7 @@ function drawStudioFrame(){
   const surface=studioSurface(design.weather);
   clearTimeout(studio.surfaceTimer);
   if(surface.progress<1)studio.surfaceTimer=setTimeout(scheduleStudio,85);
-  studio.picker=paintStudioScene(canvas,{zone,surface,items:sceneCareItems(items),scene:design.scene,weather:design.weather,angle:studio.angle,pitch:studio.pitch,panX:studio.panX,panY:studio.panY,zoom:studio.zoom,extent:studio.extent,selected:studio.mode==='edit'?studio.selected:null});
+  studio.picker=paintStudioScene(canvas,{zone,surface,items,scene:design.scene,weather:design.weather,angle:studio.angle,pitch:studio.pitch,panX:studio.panX,panY:studio.panY,zoom:studio.zoom,extent:studio.extent,selected:studio.mode==='edit'?studio.selected:null});
   drawCareShelf();
   const handle=$('rotateHandle'),anchor=studio.picker.handle;
   handle.hidden=!anchor||studio.busy;

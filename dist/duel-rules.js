@@ -78,6 +78,14 @@ const ButterflyDuel=(()=>{
     if(next>=20||next%5===4)s.winner=next>=20?0:1;
     planFlight(s,random);
   }
+  function plantTile(s,card,cell,p){
+      const tile={type:card.type,name:card.name,owner:p};
+      s.cells[cell]=card.type==='breaker'?null:tile;
+      if(card.type==='vine'){
+        const n=cell+(p===0?1:5);
+        if(neighbors(cell).includes(n)&&n!==s.pos&&!s.cells[n])s.cells[n]={...tile};
+      }
+  }
   function check(s,card,cell){
     if(s.winner!==null)throw Error('这局已经结束。');
     if(!card)return;
@@ -85,18 +93,18 @@ const ButterflyDuel=(()=>{
     if(card.key===tool.key&&!s.trial[s.turn])throw Error('本局体验卡已使用。');
     if(card.key!==tool.key&&(s.cool[s.turn][card.type]||0)>s.round)throw Error('该体系下轮恢复。');
     if(card.type==='breaker'?!hard(s.cells[cell]):!!s.cells[cell])throw Error(card.type==='breaker'?'破障需要选中一个实体阻挡。':'这格已经有植物了。');
+    if(hard(card)){
+      const preview={...s,cells:s.cells.slice()};
+      plantTile(preview,card,cell,s.turn);
+      if(paths(preview).dist[s.pos]<0)throw Error('这一步会封死蝶径，请给蝴蝶留一条通往 E5 的路。');
+    }
   }
   function play(s,card,cell,random=Math.random){
     check(s,card,cell);
     const p=s.turn;
     if(s.actions===0)s.last=[];
     if(card){
-      const tile={type:card.type,name:card.name,owner:p};
-      s.cells[cell]=card.type==='breaker'?null:tile;
-      if(card.type==='vine'){
-        const n=cell+(p===0?1:5);
-        if(neighbors(cell).includes(n)&&n!==s.pos&&!s.cells[n])s.cells[n]={...tile};
-      }
+      plantTile(s,card,cell,p);
       if(card.key===tool.key)s.trial[p]=false;
       else if(card.type!=='plain')s.cool[p][card.type]=s.round+2;
       s.last.push((p+1)+'P '+card.name+' · '+coord(cell));

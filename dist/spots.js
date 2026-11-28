@@ -77,6 +77,13 @@ const CampusSpots=(()=>{
     context.strokeStyle='#edead9';context.lineWidth=10;
     context.beginPath();context.moveTo(width*.06,height*.52);context.lineTo(width*.94,height*.52);context.stroke();
     context.beginPath();context.moveTo(width*.5,height*.05);context.lineTo(width*.5,height*.95);context.stroke();
+    // Curving pedestrian paths connect the planted areas on the schematic.
+    for(const [ink,weight] of [['#cbbf9e',8],['#fff8e6',5]]){
+      context.strokeStyle=ink;context.lineWidth=weight;context.beginPath();context.moveTo(width*.06,height*.34);
+      context.bezierCurveTo(width*.33,height*.02,width*.20,height*.80,width*.50,height*.78);
+      context.bezierCurveTo(width*.66,height*.77,width*.78,height*.40,width*.94,height*.53);context.stroke();
+    }
+    context.fillStyle='#37584b';context.font='bold 16px sans-serif';context.textAlign='center';context.fillText('↑ N',width-36,35);
     // 建筑
     context.lineWidth=1.4;context.font='600 13px "Microsoft YaHei",system-ui,sans-serif';context.textAlign='center';
     for(const building of buildings){
@@ -101,7 +108,7 @@ const CampusSpots=(()=>{
         context.fillText(String(row.count),x,y+5);
       }
       context.fillStyle='#4c5b48';context.font='600 12px "Microsoft YaHei",system-ui,sans-serif';context.textAlign='center';
-      context.fillText(spot.name,x,y+radius+15);
+      const labelWidth=context.measureText(spot.name).width+12;context.fillStyle=spot.id===selected?'#315b48':'#faf8ef';context.fillRect(x-labelWidth/2,y+radius+2,labelWidth,18);context.fillStyle=spot.id===selected?'white':'#324e41';context.fillText(spot.name,x,y+radius+15);
     }
   }
   function hitTest(canvas,clientX,clientY){
@@ -126,12 +133,13 @@ function openCampusMap(){
   const total=records.length,species=CampusSpots.speciesOf(records).length,covered=rows.filter(row=>row.id&&row.count).length;
   show('<div class="body campusMapPanel"><div class="eyebrow">CAMPUS MAP</div><h2>校园植物地图</h2><p>手记里的记录按发现点位汇总。底层是示意图，不代表真实比例。</p><canvas id="campusCanvas" width="800" height="600" role="img" aria-label="校园植物点位示意图，圆点大小表示记录数量"></canvas><p id="campusHint" class="campusHint" role="status">共 '+total+' 条记录 · '+species+' 个物种 · 覆盖 '+covered+' 个点位。点圆点或下面的点位查看记录。</p><div id="campusSpotRows" class="campusSpotRows"></div><div id="campusRecords"></div></div>');
   const canvas=$('campusCanvas');
-  let selected='';
+  let selected=null;
   const paint=()=>{
+    for(const item of $('campusSpotRows').children)item.setAttribute('aria-pressed',String(item.dataset.spot===selected));
     CampusSpots.draw(canvas,records,{selected});
     const box=$('campusRecords');
-    if(!selected){box.innerHTML='';return}
-    const list=records.filter(record=>selected===''?true:(CampusSpots.spotOf(record)?.id||'')===selected);
+    if(selected===null){box.innerHTML='';return}
+    const list=records.filter(record=>(CampusSpots.spotOf(record)?.id||'')===selected);
     const row=rows.find(item=>item.id===selected);
     box.innerHTML='<h3>'+esc(row?row.name:'点位')+' · '+list.length+' 条</h3>';
     if(!list.length){box.append('这个点位还没有记录。');return}
@@ -149,7 +157,7 @@ function openCampusMap(){
     event.preventDefault();
     const withRecords=rows.filter(row=>row.count);
     if(!withRecords.length)return;
-    const index=Math.max(0,withRecords.findIndex(row=>row.id===selected));
+    const index=withRecords.findIndex(row=>row.id===selected);
     selected=(withRecords[(index+1)%withRecords.length]||{}).id||'';
     paint();
   });
@@ -157,8 +165,21 @@ function openCampusMap(){
   const rowBox=$('campusSpotRows'),filter=document.createElement('button');
   filter.type='button';filter.className='light';filter.textContent='只看有记录的点位';filter.setAttribute('aria-pressed','false');
   filter.disabled=!rows.some(row=>row.count);
-  filter.onclick=()=>{const active=filter.getAttribute('aria-pressed')==='false';filter.setAttribute('aria-pressed',String(active));filter.textContent=active?'显示全部点位':'只看有记录的点位';for(const item of rowBox.children)item.hidden=active&&item.dataset.empty==='true'};
-  rowBox.before(filter);
+  const search=document.createElement('input');
+  search.type='search';search.placeholder='搜索点位或植物名称';search.setAttribute('aria-label',search.placeholder);
+  const toolbar=document.createElement('div');toolbar.className='campusSearch';toolbar.append(search,filter);rowBox.before(toolbar);
+  const result=document.createElement('p');result.setAttribute('role','status');rowBox.after(result);
+  function applyFilter(){
+    const query=search.value.trim().toLowerCase(),observed=filter.getAttribute('aria-pressed')==='true';
+    let visible=0;
+    for(const item of rowBox.children){
+      item.hidden=(observed&&item.dataset.empty==='true')||!item.dataset.key.includes(query);
+      if(!item.hidden)visible++;
+    }
+    result.textContent=visible?'':'没有符合条件的点位，试试其他植物或地点。';
+  }
+  search.oninput=applyFilter;
+  filter.onclick=()=>{const active=filter.getAttribute('aria-pressed')==='false';filter.setAttribute('aria-pressed',String(active));filter.textContent=active?'显示全部点位':'只看有记录的点位';applyFilter()};
   for(const row of rows){
     if(!row.id&&!row.count)continue;
     const button=document.createElement('button');
@@ -168,6 +189,7 @@ function openCampusMap(){
     const name=document.createElement('strong');name.textContent=row.name;
     const meta=document.createElement('small');meta.textContent=row.count?row.count+' 条 · '+row.speciesCount+' 种':'暂无记录';
     if(row.count){const form=CampusSpots.topForm(row.forms);if(form)meta.textContent+=' · 多为'+CampusSpots.formLabel[form]}
+    button.dataset.key=[row.name,...records.filter(p=>(CampusSpots.spotOf(p)?.id||'')===row.id).flatMap(p=>[p.name,p.latin])].join(' ').toLowerCase();
     button.append(dot,name,meta);
     button.onclick=()=>{selected=row.id||'';for(const child of rowBox.children)child.setAttribute('aria-pressed',String(child.dataset.spot===selected));paint()};
     rowBox.append(button);

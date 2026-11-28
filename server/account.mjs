@@ -20,7 +20,7 @@ function checkGarden(items){
     if(p.care!==undefined){
       if(!p.care||typeof p.care!=='object'||Array.isArray(p.care)||Object.keys(p.care).some(k=>!['water','light','nutrient'].includes(k)))return false;
       if(p.care.nutrient!==undefined&&![0,1].includes(p.care.nutrient))return false;
-      if((p.growth??2)>=3||!['water','light'].every(k=>Number.isInteger(p.care[k])&&p.care[k]>=0&&p.care[k]<=2))return false;
+      if((p.growth??2)>=3||!['water',...(p.care.light===undefined?[]:['light'])].every(k=>Number.isInteger(p.care[k])&&p.care[k]>=0&&p.care[k]<=2))return false;
     }
     if(p.generation!==undefined&&(!Number.isSafeInteger(p.generation)||p.generation<1||p.generation>1000000))return false;
     if(p.seedFrom!==undefined&&(typeof p.seedFrom!=='string'||p.seedFrom.length>80))return false;

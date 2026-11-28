@@ -1,28 +1,26 @@
 // Care is recorded per plant and only changes when its owner acts.
 const nurseryStages=[
   ['幼苗','轻轻浇水','让幼苗展开第一批新叶。'],
-  ['展叶','转盆向光','让植株展开枝叶，长成自己的株形。'],
+  ['展叶','施肥','让植株展开枝叶，长成自己的株形。'],
   ['成株','观察种穗','完成这株植物的游戏养成，留下可采集的种子。'],
   ['种子成熟','收进种子袋','保存这个品种，以后可以反复播种，也能分享给花友。'],
   ['已留种','打开种子袋','种子已收好，母株会继续留在花园里。']
 ];
-const careNames={water:'水分',light:'光照',nutrient:'养分'};
-const careVerbs={water:'浇水',light:'转盆向光',nutrient:'施肥'};
+const careNames={water:'水分',nutrient:'养分'};
+const careVerbs={water:'浇水',nutrient:'施肥'};
 function growthSummary(plant){
-  const stage=plant.growth??2,goals=GardenLayout.carePlan(plant),care={water:0,light:0,nutrient:0,...plant.care};
+  const stage=plant.growth??2,goals=GardenLayout.carePlan(plant),care={water:0,nutrient:0,...plant.care};
   const keys=Object.keys(goals),progress=keys.reduce((n,k)=>n+Math.min(goals[k],care[k]),0)/keys.reduce((n,k)=>n+goals[k],0);
   return {stage,goals,care,percent:stage>=3?100:Math.round((stage+progress)/3*100)};
 }
-async function careForPlant(plant,kind,owner,rotation){
+async function careForPlant(plant,kind,owner){
   const snapshot=growthSummary(plant);
   await writeGarden((records,design)=>{
     if(!owner||owner!==studioOwner()||visitingGarden||activeStudioDraft())throw Error('花园已切换或正在布置，请重新选择。');
     const current=records.find(p=>p.uid===plant.uid);
     if(!current||current.latin!==plant.latin||(current.growth??2)!==snapshot.stage||
        Object.keys(careNames).some(k=>(current.care?.[k]||0)!==snapshot.care[k]))throw Error('植株已有更新，请重新选择。');
-    if(Number.isFinite(rotation))current.rotation=rotation;
-    const canGrowTowardLight=(current.growth??2)<3&&(current.care?.light||0)<(GardenLayout.carePlan(current).light||0);
-    if(kind!=='light'||canGrowTowardLight)GardenLayout.tend(current,kind);
+    GardenLayout.tend(current,kind);
     if((current.growth??2)>snapshot.stage){
       const other=GardenLayout.blocker(GardenLayout.located(current),records.concat(design.decorations));
       if(other)throw Error('长大后会碰到「'+(other.name||GardenLayout.props[other.kind])+'」，请先留出空间。');
@@ -55,9 +53,9 @@ function renderPlantCare(plant,panel=$('carePanel'),compact=false){
   const status=panel.querySelector('.careStatus'),buttons=panel.querySelector('.careActions');
   if(blocked)status.textContent='保存或取消布置后可以照料。';
   else if(stage>=3)status.textContent='植株已成熟，浇水和施肥会记入照料次数。';
-  if(!blocked)status.textContent='在花园场景内拖动水壶或肥料袋到植株上方，左右拖动植株即可转盆向光。';
+  if(!blocked)status.textContent='在花园场景内拖动水壶或肥料袋到植株上方完成照料。';
   for(const k of (stage<3?Object.keys(goals):['water','nutrient',stage===3?'harvest':'pocket'])){
-    if(['water','light','nutrient'].includes(k))continue;
+    if(['water','nutrient'].includes(k))continue;
     const b=document.createElement('button'),done=stage<3&&care[k]>=goals[k];b.type='button';b.className='light careAction';b.dataset.care=k;
     b.textContent=(careVerbs[k]||nurseryStages[stage][1])+(done?' ✓':'');b.disabled=blocked||done;
     b.onclick=async()=>{
